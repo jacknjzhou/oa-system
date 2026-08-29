@@ -7,12 +7,25 @@ Thumbs.db
 .vscode/
 *.iml
 
-# Build
+# Java / Maven
 target/
 build/
-dist/
+*.jar
+*.war
+!mvnw
+!mvnw.cmd
+
+# Node.js / Frontend
 node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
 
 # Env
 .env
+.env.local
 *.log
+
+# Docker
+docker/data/
