@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OA 系统 · 部署架构与 CI/CD</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface: #F7F7F8;
+  --surface-muted: #EFEFF2;
+  --text: #171717;
+  --text-muted: #52525B;
+  --border: rgba(23, 23, 23, 0.12);
+  --brand: #4B3FE3;
+  --brand-soft: #F2F7FF;
+  --brand-soft-strong: #E5EAFF;
+  --brand-text: #1A1759;
+  --accent: #27D2BF;
+  --accent-soft: #EAFBF8;
+  --accent-text: #0F766E;
+  --success: #1DC981;
+  --warning: #EFAA17;
+  --danger: #E8463A;
+  --code-bg: #1E1E2E;
+  --code-text: #CDD6F4;
+  --radius: 8px;
+  --radius-card: 12px;
+  --spacer-4: 4px;
+  --spacer-8: 8px;
+  --spacer-12: 12px;
+  --spacer-16: 16px;
+  --spacer-20: 20px;
+  --spacer-24: 24px;
+  --spacer-32: 32px;
+  --font-sans: "SF Pro Text", "PingFang SC", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-strong: 600;
+  --text-caption: 12px/18px;
+  --text-body: 14px/20px;
+  --text-title: 16px/24px;
+  --text-code: 13px/20px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #171717;
+    --surface-muted: #262626;
+    --text: #E5E5E5;
+    --text-muted: #A1A1AA;
+    --border: rgba(229, 229, 229, 0.12);
+    --brand: #6054F1;
+    --brand-soft: #1A1759;
+    --brand-soft-strong: #3C2ECA;
+    --brand-text: #CFD8FF;
+    --accent-soft: #123F3C;
+    --accent-text: #CCFBF1;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--surface);
+  color: var(--text);
+  font: var(--weight-regular) var(--text-body) var(--font-sans);
+  line-height: 1.6;
+  padding: var(--spacer-24);
+  max-width: 1080px;
+  margin: 0 auto;
+}
+h1 { font: var(--weight-strong) 24px/32px var(--font-sans); margin-bottom: var(--spacer-8); }
+h2 {
+  font: var(--weight-strong) 20px/28px var(--font-sans);
+  margin-top: var(--spacer-32);
+  margin-bottom: var(--spacer-12);
+  padding-bottom: var(--spacer-8);
+  border-bottom: 2px solid var(--brand);
+}
+h3 {
+  font: var(--weight-medium) var(--text-title) var(--font-sans);
+  margin-top: var(--spacer-24);
+  margin-bottom: var(--spacer-8);
+}
+p { margin-bottom: var(--spacer-12); }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--spacer-20);
+  margin-bottom: var(--spacer-16);
+  overflow-x: auto;
+}
+.svg-wrap { width: 100%; margin: var(--spacer-16) 0; }
+.svg-wrap svg { width: 100%; height: auto; display: block; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--spacer-12) 0;
+  font-size: var(--text-body);
+}
+th, td {
+  text-align: left;
+  padding: var(--spacer-8) var(--spacer-12);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+th {
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+  font-size: var(--text-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+td code, p code {
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+  background: var(--surface-muted);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.code-block {
+  background: var(--code-bg);
+  border-radius: var(--radius-card);
+  padding: var(--spacer-20);
+  margin: var(--spacer-12) 0;
+  overflow-x: auto;
+  font: var(--weight-regular) 13px/22px var(--font-mono);
+  color: var(--code-text);
+  white-space: pre;
+}
+.code-block .kw { color: #CBA6F7; }
+.code-block .str { color: #A6E3A1; }
+.code-block .cmt { color: #6C7086; font-style: italic; }
+.code-block .num { color: #FAB387; }
+.toc {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--spacer-20);
+  margin-bottom: var(--spacer-24);
+}
+.toc-title { font-weight: var(--weight-medium); margin-bottom: var(--spacer-8); }
+.toc a { display: block; color: var(--brand); text-decoration: none; padding: 2px 0; font-size: var(--text-body); }
+.toc a:hover { text-decoration: underline; }
+.note {
+  background: var(--brand-soft);
+  border-left: 3px solid var(--brand);
+  padding: var(--spacer-12) var(--spacer-16);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  margin: var(--spacer-12) 0;
+  color: var(--brand-text);
+  font-size: var(--text-caption);
+}
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font: var(--weight-medium) 11px/16px var(--font-sans);
+  letter-spacing: 0.03em;
+}
+.badge-brand { background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--brand); }
+.badge-success { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
+.badge-warning { background: color-mix(in srgb, var(--warning) 14%, transparent); color: var(--warning); }
+.badge-accent { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent-text); }
+
+/* SVG styles */
+.t-title { fill: var(--text); font: var(--weight-medium) var(--text-title) var(--font-sans); }
+.th { fill: var(--text); font: var(--weight-medium) var(--text-body) var(--font-sans); }
+.ts { fill: var(--text-muted); font: var(--weight-regular) var(--text-caption) var(--font-sans); }
+.tl { fill: var(--text-muted); font: var(--weight-medium) var(--text-caption) var(--font-sans); }
+.tf { fill: var(--text-muted); font: var(--weight-regular) 11px/16px var(--font-mono); }
+.lbl { fill: var(--text-muted); font: var(--weight-medium) 11px/16px var(--font-sans); }
+.lbl-bg { fill: var(--surface); stroke: var(--border); stroke-width: 1; }
+g.c-neutral > rect, g.c-neutral > polygon { fill: var(--surface); stroke: var(--border); stroke-width: 1.5; }
+g.c-brand > rect { fill: var(--brand-soft); stroke: var(--brand); stroke-width: 1.5; }
+g.c-brand .th { fill: var(--brand-text); }
+g.c-brand .ts { fill: var(--brand); }
+g.c-accent > rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+g.c-accent .th { fill: var(--accent-text); }
+g.c-success > rect { fill: color-mix(in srgb, var(--success) 14%, transparent); stroke: var(--success); stroke-width: 1.5; }
+g.c-warning > rect { fill: color-mix(in srgb, var(--warning) 14%, transparent); stroke: var(--warning); stroke-width: 1.5; }
+g.c-danger > rect { fill: color-mix(in srgb, var(--danger) 14%, transparent); stroke: var(--danger); stroke-width: 1.5; }
+g.c-boundary > rect { fill: color-mix(in srgb, var(--surface-muted) 50%, transparent); stroke: var(--border); stroke-width: 1.5; stroke-dasharray: 6 5; }
+.arr { stroke: color-mix(in srgb, var(--text-muted) 60%, transparent); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.arr-dashed { stroke-dasharray: 5 5; }
+.arr-head { fill: color-mix(in srgb, var(--text-muted) 72%, transparent); }
+.arr-brand { stroke: var(--brand); }
+.arr-brand-head { fill: var(--brand); }
+</style>
+</head>
+<body>
+
+<h1>OA 系统 · 部署架构与 CI/CD</h1>
+<p>版本 1.0 · 2026-08-29 · 容器编排：Kubernetes · 镜像仓库：Harbor · CI/CD：GitLab CI + ArgoCD</p>
+
+<div class="toc">
+  <div class="toc-title">目录</div>
+  <a href="#sec1">1. K8s 集群拓扑</a>
+  <a href="#sec2">2. 命名空间与工作负载规划</a>
+  <a href="#sec3">3. 网络与服务暴露</a>
+  <a href="#sec4">4. 存储与配置管理</a>
+  <a href="#sec5">5. CI/CD 流水线</a>
+  <a href="#sec6">6. 监控与可观测性</a>
+</div>
+
+<!-- ==================== Section 1 ==================== -->
+<h2 id="sec1">1. K8s 集群拓扑</h2>
+
+<div class="card svg-wrap">
+<svg viewBox="0 0 900 640" aria-label="K8s集群拓扑图">
+  <defs>
+    <marker id="k8a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="arr-head" d="M1 1 L7 4 L1 7 Z" />
+    </marker>
+    <marker id="k8ab" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="arr-brand-head" d="M1 1 L7 4 L1 7 Z" />
+    </marker>
+  </defs>
+  <text class="t-title" x="450" y="28" text-anchor="middle">OA 系统 · Kubernetes 集群拓扑</text>
+
+  <!-- External -->
+  <text class="tl" x="30" y="54">外部入口</text>
+  <g class="c-neutral"><rect x="80" y="60" width="120" height="44" rx="8" /><text class="th" x="140" y="80" text-anchor="middle">用户访问</text><text class="ts" x="140" y="96" text-anchor="middle">Web · App · 企微</text></g>
+  <g class="c-neutral"><rect x="230" y="60" width="120" height="44" rx="8" /><text class="th" x="290" y="80" text-anchor="middle">CDN</text><text class="ts" x="290" y="96" text-anchor="middle">静态资源加速</text></g>
+  <g class="c-neutral"><rect x="380" y="60" width="120" height="44" rx="8" /><text class="th" x="440" y="80" text-anchor="middle">GitLab CI</text><text class="ts" x="440" y="96" text-anchor="middle">构建 · 推送</text></g>
+  <g class="c-neutral"><rect x="530" y="60" width="120" height="44" rx="8" /><text class="th" x="590" y="80" text-anchor="middle">ArgoCD</text><text class="ts" x="590" y="96" text-anchor="middle">GitOps 部署</text></g>
+  <g class="c-neutral"><rect x="680" y="60" width="120" height="44" rx="8" /><text class="th" x="740" y="80" text-anchor="middle">Harbor</text><text class="ts" x="740" y="96" text-anchor="middle">镜像仓库</text></g>
+
+  <!-- Ingress Layer -->
+  <path class="arr" d="M140 104 V130" marker-end="url(#k8a)" />
+  <path class="arr" d="M290 104 V130" marker-end="url(#k8a)" />
+  <text class="tl" x="30" y="140">流量入口</text>
+  <g class="c-brand"><rect x="120" y="134" width="540" height="44" rx="8" /><text class="th" x="390" y="154" text-anchor="middle">Ingress Controller (Nginx Ingress)</text><text class="ts" x="390" y="170" text-anchor="middle">TLS 终结 · 路由 · WAF 接入 · 限流</text></g>
+  <path class="arr" d="M590 104 V130" marker-end="url(#k8ab)" />
+  <path class="arr" d="M740 104 V130" marker-end="url(#k8ab)" />
+
+  <!-- Cluster boundary -->
+  <path class="arr" d="M390 178 V200" marker-end="url(#k8a)" />
+  <g class="c-boundary"><rect x="20" y="200" width="860" height="420" rx="12" />
+  <text class="ts" x="860" y="218" text-anchor="end">K8s 集群 (3 Master + 5 Worker)</text></g>
+
+  <!-- Namespace: oa-prod -->
+  <g class="c-boundary"><rect x="40" y="226" width="500" height="380" rx="10" /><text class="tl" x="50" y="244">namespace: oa-prod</text></g>
+
+  <!-- Gateway service -->
+  <path class="arr" d="M390 200 V260" marker-end="url(#k8a)" />
+  <g class="c-accent"><rect x="170" y="256" width="240" height="40" rx="8" /><text class="th" x="290" y="276" text-anchor="middle">API Gateway Service</text><text class="ts" x="290" y="290" text-anchor="middle">Spring Cloud Gateway · 3 replicas</text></g>
+  <path class="arr" d="M290 296 V320" marker-end="url(#k8a)" />
+
+  <!-- Microservices row 1 -->
+  <g class="c-neutral"><rect x="50" y="324" width="140" height="48" rx="8" /><text class="th" x="120" y="344" text-anchor="middle">用户与组织</text><text class="ts" x="120" y="360" text-anchor="middle">2 replicas</text></g>
+  <g class="c-brand"><rect x="210" y="324" width="140" height="48" rx="8" /><text class="th" x="280" y="344" text-anchor="middle">工作流引擎</text><text class="ts" x="280" y="360" text-anchor="middle">3 replicas</text></g>
+  <g class="c-neutral"><rect x="370" y="324" width="140" height="48" rx="8" /><text class="th" x="440" y="344" text-anchor="middle">公文管理</text><text class="ts" x="440" y="360" text-anchor="middle">2 replicas</text></g>
+  <path class="arr" d="M250 316 H120 V324" marker-end="url(#k8a)" />
+  <path class="arr" d="M290 320 V324" marker-end="url(#k8a)" />
+  <path class="arr" d="M330 316 H440 V324" marker-end="url(#k8a)" />
+
+  <!-- Microservices row 2 -->
+  <g class="c-neutral"><rect x="50" y="390" width="140" height="48" rx="8" /><text class="th" x="120" y="410" text-anchor="middle">审批管理</text><text class="ts" x="120" y="426" text-anchor="middle">2 replicas</text></g>
+  <g class="c-neutral"><rect x="210" y="390" width="140" height="48" rx="8" /><text class="th" x="280" y="410" text-anchor="middle">日程与任务</text><text class="ts" x="280" y="426" text-anchor="middle">2 replicas</text></g>
+  <g class="c-neutral"><rect x="370" y="390" width="140" height="48" rx="8" /><text class="th" x="440" y="410" text-anchor="middle">消息通知</text><text class="ts" x="440" y="426" text-anchor="middle">2 replicas</text></g>
+
+  <!-- Shared services -->
+  <text class="ts" x="50" y="462">横切服务</text>
+  <g class="c-neutral"><rect x="50" y="468" width="100" height="36" rx="8" /><text class="th" x="100" y="481" text-anchor="middle" style="font-size:12px">ConfigMap</text><text class="ts" x="100" y="496" text-anchor="middle">应用配置</text></g>
+  <g class="c-neutral"><rect x="165" y="468" width="100" height="36" rx="8" /><text class="th" x="215" y="481" text-anchor="middle" style="font-size:12px">Secret</text><text class="ts" x="215" y="496" text-anchor="middle">凭证密钥</text></g>
+  <g class="c-neutral"><rect x="280" y="468" width="100" height="36" rx="8" /><text class="th" x="330" y="481" text-anchor="middle" style="font-size:12px">HPA</text><text class="ts" x="330" y="496" text-anchor="middle">自动扩缩</text></g>
+  <g class="c-neutral"><rect x="395" y="468" width="100" height="36" rx="8" /><text class="th" x="445" y="481" text-anchor="middle" style="font-size:12px">Service Mesh</text><text class="ts" x="445" y="496" text-anchor="middle">Istio Sidecar</text></g>
+
+  <!-- PV section -->
+  <text class="ts" x="50" y="524">持久存储</text>
+  <g class="c-neutral"><rect x="50" y="530" width="80" height="32" rx="8" /><text class="th" x="90" y="550" text-anchor="middle" style="font-size:12px">PVC</text></g>
+  <g class="c-neutral"><rect x="145" y="530" width="80" height="32" rx="8" /><text class="th" x="185" y="550" text-anchor="middle" style="font-size:12px">PV</text></g>
+  <g class="c-neutral"><rect x="240" y="530" width="80" height="32" rx="8" /><text class="th" x="280" y="550" text-anchor="middle" style="font-size:12px">StorageClass</text></g>
+
+  <!-- Namespace: oa-data -->
+  <g class="c-boundary"><rect x="560" y="226" width="300" height="240" rx="10" /><text class="tl" x="570" y="244">namespace: oa-data</text></g>
+  <g class="c-brand"><rect x="580" y="258" width="120" height="44" rx="8" /><text class="th" x="640" y="278" text-anchor="middle">MySQL</text><text class="ts" x="640" y="294" text-anchor="middle">StatefulSet · 主从</text></g>
+  <g class="c-neutral"><rect x="720" y="258" width="120" height="44" rx="8" /><text class="th" x="780" y="278" text-anchor="middle">Redis</text><text class="ts" x="780" y="294" text-anchor="middle">Sentinel 哨兵</text></g>
+  <g class="c-neutral"><rect x="580" y="316" width="120" height="44" rx="8" /><text class="th" x="640" y="336" text-anchor="middle">MinIO</text><text class="ts" x="640" y="352" text-anchor="middle">对象存储</text></g>
+  <g class="c-neutral"><rect x="720" y="316" width="120" height="44" rx="8" /><text class="th" x="780" y="336" text-anchor="middle">ES</text><text class="ts" x="780" y="352" text-anchor="middle">全文检索</text></g>
+  <g class="c-accent"><rect x="580" y="374" width="260" height="40" rx="8" /><text class="th" x="710" y="394" text-anchor="middle">Kafka</text><text class="ts" x="710" y="408" text-anchor="middle">消息队列 · 3 broker</text></g>
+
+  <!-- Namespace: oa-monitor -->
+  <g class="c-boundary"><rect x="560" y="486" width="300" height="120" rx="10" /><text class="tl" x="570" y="504">namespace: oa-monitor</text></g>
+  <g class="c-neutral"><rect x="580" y="514" width="80" height="36" rx="8" /><text class="th" x="620" y="527" text-anchor="middle" style="font-size:11px">Prometheus</text><text class="ts" x="620" y="541" text-anchor="middle">指标</text></g>
+  <g class="c-neutral"><rect x="675" y="514" width="80" height="36" rx="8" /><text class="th" x="715" y="527" text-anchor="middle" style="font-size:11px">Grafana</text><text class="ts" x="715" y="541" text-anchor="middle">看板</text></g>
+  <g class="c-neutral"><rect x="770" y="514" width="80" height="36" rx="8" /><text class="th" x="810" y="527" text-anchor="middle" style="font-size:11px">Loki</text><text class="ts" x="810" y="541" text-anchor="middle">日志</text></g>
+  <g class="c-neutral"><rect x="580" y="562" width="80" height="32" rx="8" /><text class="th" x="620" y="575" text-anchor="middle" style="font-size:11px">Jaeger</text><text class="ts" x="620" y="588" text-anchor="middle">链路追踪</text></g>
+  <g class="c-neutral"><rect x="675" y="562" width="80" height="32" rx="8" /><text class="th" x="715" y="575" text-anchor="middle" style="font-size:11px">AlertManager</text><text class="ts" x="715" y="588" text-anchor="middle">告警</text></g>
+
+  <!-- Connection arrows -->
+  <path class="arr arr-dashed" d="M490 350 H560 V280 H580" marker-end="url(#k8a)" />
+  <path class="arr arr-dashed" d="M490 410 H540 V400 H580" marker-end="url(#k8a)" />
+</svg>
+</div>
+
+<h3>集群节点规划</h3>
+<table>
+<tr><th>节点角色</th><th>数量</th><th>规格</th><th>运行组件</th></tr>
+<tr><td>Master</td><td>3</td><td>8C 16G 200G SSD</td><td>etcd · kube-apiserver · kube-scheduler · kube-controller-manager</td></tr>
+<tr><td>Worker (业务)</td><td>5</td><td>16C 32G 500G SSD</td><td>oa-prod 命名空间下的微服务 Pod</td></tr>
+<tr><td>Worker (数据)</td><td>3</td><td>16C 64G 1T NVMe</td><td>oa-data 命名空间下的 MySQL/Redis/ES StatefulSet</td></tr>
+</table>
+
+<!-- ==================== Section 2 ==================== -->
+<h2 id="sec2">2. 命名空间与工作负载规划</h2>
+
+<table>
+<tr><th>命名空间</th><th>用途</th><th>工作负载</th><th>副本策略</th></tr>
+<tr><td><code>oa-prod</code></td><td>生产业务服务</td><td>6 个微服务 Deployment</td><td>HPA: CPU>70% 扩容，min=2 max=10</td></tr>
+<tr><td><code>oa-data</code></td><td>数据存储组件</td><td>MySQL/Redis/ES StatefulSet</td><td>固定副本，数据持久化</td></tr>
+<tr><td><code>oa-monitor</code></td><td>监控可观测性</td><td>Prometheus/Grafana/Loki</td><td>固定副本</td></tr>
+<tr><td><code>oa-staging</code></td><td>预发布环境</td><td>与 prod 相同拓扑，缩小副本</td><td>固定 min=1</td></tr>
+<tr><td><code>kube-system</code></td><td>系统组件</td><td>CoreDNS · Nginx Ingress · Istio</td><td>DaemonSet / 固定副本</td></tr>
+</table>
+
+<h3>资源配额 (ResourceQuota)</h3>
+<div class="code-block"><span class="cmt">-- namespace: oa-prod 的资源配额</span>
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: oa-prod-quota
+  namespace: oa-prod
+spec:
+  hard:
+    requests.cpu: <span class="str">"40"</span>          <span class="cmt"># 总 CPU 请求上限</span>
+    requests.memory: 80Gi       <span class="cmt"># 总内存请求上限</span>
+    limits.cpu: <span class="str">"60"</span>
+    limits.memory: 120Gi
+    pods: <span class="str">"50"</span>               <span class="cmt"># 最大 Pod 数</span>
+    persistentvolumeclaims: <span class="str">"10"</span></div>
+
+<div class="note">每个微服务 Deployment 配置 <code>requests: 500m/1Gi</code>、<code>limits: 2000m/4Gi</code>，保证节点资源利用率 70% 以下时仍有余量。</div>
+
+<!-- ==================== Section 3 ==================== -->
+<h2 id="sec3">3. 网络与服务暴露</h2>
+
+<div class="card svg-wrap">
+<svg viewBox="0 0 860 280" aria-label="网络流量路径">
+  <defs>
+    <marker id="na" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="arr-head" d="M1 1 L7 4 L1 7 Z" />
+    </marker>
+  </defs>
+  <text class="t-title" x="430" y="24" text-anchor="middle">请求流量路径 · 从外到内</text>
+
+  <g class="c-neutral"><rect x="30" y="50" width="110" height="44" rx="8" /><text class="th" x="85" y="70" text-anchor="middle">用户</text><text class="ts" x="85" y="86" text-anchor="middle">HTTPS 443</text></g>
+  <path class="arr" d="M140 72 H185" marker-end="url(#na)" />
+  <rect class="lbl-bg" x="145" y="58" width="40" height="20" rx="4" /><text class="lbl" x="165" y="72" text-anchor="middle">TLS</text>
+
+  <g class="c-brand"><rect x="190" y="50" width="130" height="44" rx="8" /><text class="th" x="255" y="70" text-anchor="middle">Nginx Ingress</text><text class="ts" x="255" y="86" text-anchor="middle">L7 路由 · WAF</text></g>
+  <path class="arr" d="M320 72 H365" marker-end="url(#na)" />
+  <rect class="lbl-bg" x="325" y="58" width="40" height="20" rx="4" /><text class="lbl" x="345" y="72" text-anchor="middle">JWT</text>
+
+  <g class="c-accent"><rect x="370" y="50" width="130" height="44" rx="8" /><text class="th" x="435" y="70" text-anchor="middle">API Gateway</text><text class="ts" x="435" y="86" text-anchor="middle">鉴权 · 限流</text></g>
+  <path class="arr" d="M500 72 H545" marker-end="url(#na)" />
+
+  <g class="c-neutral"><rect x="550" y="50" width="130" height="44" rx="8" /><text class="th" x="615" y="70" text-anchor="middle">Service (ClusterIP)</text><text class="ts" x="615" y="86" text-anchor="middle">kube-proxy</text></g>
+  <path class="arr" d="M680 72 H725" marker-end="url(#na)" />
+
+  <g class="c-neutral"><rect x="730" y="50" width="100" height="44" rx="8" /><text class="th" x="780" y="70" text-anchor="middle">Pod</text><text class="ts" x="780" y="86" text-anchor="middle">微服务容器</text></g>
+
+  <!-- Istio sidecar -->
+  <g class="c-neutral"><rect x="660" y="120" width="170" height="36" rx="8" /><text class="th" x="745" y="138" text-anchor="middle" style="font-size:12px">Istio Sidecar (Envoy)</text><text class="ts" x="745" y="150" text-anchor="middle" style="font-size:11px">mTLS · 熔断 · 重试</text></g>
+  <path class="arr arr-dashed" d="M780 94 V118" marker-end="url(#na)" />
+
+  <!-- Network Policy -->
+  <text class="ts" x="30" y="180">网络策略 (NetworkPolicy):</text>
+  <g class="c-neutral"><rect x="30" y="190" width="200" height="40" rx="8" /><text class="th" x="130" y="210" text-anchor="middle" style="font-size:12px">default-deny-all</text><text class="ts" x="130" y="224" text-anchor="middle" style="font-size:11px">默认拒绝所有入站</text></g>
+  <g class="c-neutral"><rect x="250" y="190" width="200" height="40" rx="8" /><text class="th" x="350" y="210" text-anchor="middle" style="font-size:12px">allow-gateway-to-svc</text><text class="ts" x="350" y="224" text-anchor="middle" style="font-size:11px">仅网关可访问业务Pod</text></g>
+  <g class="c-neutral"><rect x="470" y="190" width="200" height="40" rx="8" /><text class="th" x="570" y="210" text-anchor="middle" style="font-size:12px">allow-svc-to-data</text><text class="ts" x="570" y="224" text-anchor="middle" style="font-size:11px">业务Pod可访问数据Pod</text></g>
+</svg>
+</div>
+
+<h3>Ingress 路由规则</h3>
+<table>
+<tr><th>域名</th><th>路径</th><th>后端 Service</th><th>说明</th></tr>
+<tr><td><code>oa.example.com</code></td><td><code>/</code></td><td>web-frontend</td><td>SPA 静态资源</td></tr>
+<tr><td><code>oa.example.com/api</code></td><td><code>/api/*</code></td><td>api-gateway</td><td>API 统一入口</td></tr>
+<tr><td><code>oa.example.com/ws</code></td><td><code>/ws</code></td><td>api-gateway</td><td>WebSocket 长连接</td></tr>
+<tr><td><code>oa.example.com/health</code></td><td><code>/health</code></td><td>api-gateway</td><td>健康检查（无鉴权）</td></tr>
+</table>
+
+<!-- ==================== Section 4 ==================== -->
+<h2 id="sec4">4. 存储与配置管理</h2>
+
+<h3>数据存储规划</h3>
+<table>
+<tr><th>组件</th><th>K8s 资源</th><th>存储类</th><th>容量</th><th>备份策略</th></tr>
+<tr><td>MySQL</td><td>StatefulSet + PVC</td><td>local-path (SSD)</td><td>500Gi</td><td>每日全量 × 物理增量 binlog · 保留7天</td></tr>
+<tr><td>Redis</td><td>StatefulSet + PVC</td><td>local-path</td><td>50Gi</td><td>RDB 每小时 × AOF 实时</td></tr>
+<tr><td>MinIO</td><td>StatefulSet + PVC</td><td>local-path</td><td>2Ti</td><td>跨节点 Erasure Code</td></tr>
+<tr><td>ElasticSearch</td><td>StatefulSet + PVC</td><td>local-path (NVMe)</td><td>200Gi</td><td>快照到 MinIO 每6小时</td></tr>
+<tr><td>Kafka</td><td>StatefulSet + PVC</td><td>local-path</td><td>100Gi</td><td>7天保留策略</td></tr>
+</table>
+
+<h3>配置管理分层</h3>
+<div class="code-block"><span class="cmt"># ConfigMap 结构（每个微服务一套）</span>
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workflow-engine-config
+  namespace: oa-prod
+data:
+  application.yml: |
+    spring:
+      datasource:
+        url: jdbc:mysql://mysql.oa-data:3306/oa_workflow
+        hikari:
+          maximum-pool-size: <span class="num">20</span>
+      redis:
+        host: redis.oa-data
+        port: <span class="num">6379</span>
+      kafka:
+        bootstrap-servers: kafka.oa-data:9092
+    flowable:
+      database-schema-update: <span class="kw">true</span>
+      async-executor-active: <span class="kw">true</span>
+---
+<span class="cmt"># Secret — 敏感凭证，base64 编码</span>
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oa-db-secret
+  namespace: oa-prod
+type: Opaque
+data:
+  mysql-password: <span class="str">b2Ffcm9vdF8yMDI2</span>     <span class="cmt"># echo -n 'pass' | base64</span>
+  redis-password: <span class="str">cmVkaXNfcHcwMQ==</span>
+  jwt-secret: <span class="str">and0X3NlY3JldF9vYQ==</span></div>
+
+<div class="note">生产环境使用 <strong>Sealed Secrets</strong> 或 <strong>External Secrets + Vault</strong> 管理密钥，Git 仓库中只存加密后的 Secret，集群内部解密还原。此处展示的是简化结构。</div>
+
+<!-- ==================== Section 5 ==================== -->
+<h2 id="sec5">5. CI/CD 流水线</h2>
+
+<div class="card svg-wrap">
+<svg viewBox="0 0 880 380" aria-label="CI/CD流水线图">
+  <defs>
+    <marker id="ca" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="arr-head" d="M1 1 L7 4 L1 7 Z" />
+    </marker>
+    <marker id="cab" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="arr-brand-head" d="M1 1 L7 4 L1 7 Z" />
+    </marker>
+  </defs>
+  <text class="t-title" x="440" y="24" text-anchor="middle">CI/CD 流水线 · 从代码提交到生产部署</text>
+
+  <!-- CI Stage -->
+  <g class="c-boundary"><rect x="20" y="50" width="530" height="130" rx="10" /><text class="tl" x="30" y="68">CI 阶段 (GitLab CI)</text></g>
+
+  <g class="c-neutral"><rect x="40" y="80" width="100" height="80" rx="8" /><text class="th" x="90" y="100" text-anchor="middle" style="font-size:12px">1. Lint</text><text class="ts" x="90" y="116" text-anchor="middle">代码检查</text><text class="ts" x="90" y="130" text-anchor="middle" style="font-size:11px">ESLint</text><text class="ts" x="90" y="144" text-anchor="middle" style="font-size:11px">Checkstyle</text></g>
+  <path class="arr" d="M140 120 H165" marker-end="url(#ca)" />
+
+  <g class="c-neutral"><rect x="170" y="80" width="100" height="80" rx="8" /><text class="th" x="220" y="100" text-anchor="middle" style="font-size:12px">2. Build</text><text class="ts" x="220" y="116" text-anchor="middle">构建</text><text class="ts" x="220" y="130" text-anchor="middle" style="font-size:11px">Maven/Gradle</text><text class="ts" x="220" y="144" text-anchor="middle" style="font-size:11px">npm build</text></g>
+  <path class="arr" d="M270 120 H295" marker-end="url(#ca)" />
+
+  <g class="c-neutral"><rect x="300" y="80" width="100" height="80" rx="8" /><text class="th" x="350" y="100" text-anchor="middle" style="font-size:12px">3. Test</text><text class="ts" x="350" y="116" text-anchor="middle">测试</text><text class="ts" x="350" y="130" text-anchor="middle" style="font-size:11px">JUnit 80%</text><text class="ts" x="350" y="144" text-anchor="middle" style="font-size:11px">SonarQube</text></g>
+  <path class="arr" d="M400 120 H425" marker-end="url(#ca)" />
+
+  <g class="c-brand"><rect x="430" y="80" width="100" height="80" rx="8" /><text class="th" x="480" y="100" text-anchor="middle" style="font-size:12px">4. Push</text><text class="ts" x="480" y="116" text-anchor="middle">推送镜像</text><text class="ts" x="480" y="130" text-anchor="middle" style="font-size:11px">Docker build</text><text class="ts" x="480" y="144" text-anchor="middle" style="font-size:11px">→ Harbor</text></g>
+
+  <!-- Harbor -->
+  <path class="arr arr-brand" d="M480 160 V200" marker-end="url(#cab)" />
+  <g class="c-accent"><rect x="400" y="200" width="160" height="40" rx="8" /><text class="th" x="480" y="220" text-anchor="middle">Harbor 镜像仓库</text><text class="ts" x="480" y="234" text-anchor="middle" style="font-size:11px">漏洞扫描 · 签名</text></g>
+
+  <!-- CD Stage -->
+  <g class="c-boundary"><rect x="20" y="200" width="340" height="170" rx="10" /><text class="tl" x="30" y="218">CD 阶段 (ArgoCD GitOps)</text></g>
+
+  <g class="c-brand"><rect x="40" y="250" width="100" height="70" rx="8" /><text class="th" x="90" y="270" text-anchor="middle" style="font-size:12px">5. Staging</text><text class="ts" x="90" y="284" text-anchor="middle" style="font-size:11px">自动部署</text><text class="ts" x="90" y="298" text-anchor="middle" style="font-size:11px">→ oa-staging</text><text class="ts" x="90" y="312" text-anchor="middle" style="font-size:11px">集成测试</text></g>
+  <path class="arr" d="M140 285 H165" marker-end="url(#ca)" />
+
+  <g class="c-warning"><rect x="170" y="250" width="100" height="70" rx="8" /><text class="th" x="220" y="270" text-anchor="middle" style="font-size:12px">6. Approval</text><text class="ts" x="220" y="284" text-anchor="middle" style="font-size:11px">人工审批</text><text class="ts" x="220" y="298" text-anchor="middle" style="font-size:11px">Change Mgmt</text><text class="ts" x="220" y="312" text-anchor="middle" style="font-size:11px">⏸️ Gate</text></g>
+  <path class="arr" d="M270 285 H295" marker-end="url(#ca)" />
+
+  <g class="c-success"><rect x="300" y="250" width="40" height="70" rx="8" /><text class="th" x="320" y="282" text-anchor="middle" style="font-size:11px">7.</text><text class="th" x="320" y="298" text-anchor="middle" style="font-size:12px">Prod</text></g>
+
+  <!-- ArgoCD -->
+  <path class="arr arr-brand" d="M530 220 H600 V285 H560" marker-end="url(#cab)" />
+  <g class="c-accent"><rect x="370" y="290" width="180" height="40" rx="8" /><text class="th" x="460" y="310" text-anchor="middle" style="font-size:12px">ArgoCD</text><text class="ts" x="460" y="324" text-anchor="middle" style="font-size:11px">同步 K8s Manifest → 集群</text></g>
+
+  <!-- Git Repo -->
+  <g class="c-neutral"><rect x="680" y="200" width="160" height="40" rx="8" /><text class="th" x="760" y="220" text-anchor="middle" style="font-size:12px">Git 仓库</text><text class="ts" x="760" y="234" text-anchor="middle" style="font-size:11px">Helm Charts + Manifest</text></g>
+  <path class="arr arr-dashed" d="M680 220 H620 V310 H550" marker-end="url(#ca)" />
+
+  <!-- Rollback -->
+  <g class="c-danger"><rect x="680" y="270" width="160" height="36" rx="8" /><text class="th" x="760" y="288" text-anchor="middle" style="font-size:12px">Rollback</text><text class="ts" x="760" y="300" text-anchor="middle" style="font-size:11px">回滚至上一版本</text></g>
+  <path class="arr arr-dashed" d="M680 288 H650 V310" marker-end="url(#ca)" />
+
+  <!-- Monitoring loop -->
+  <path class="arr arr-dashed" d="M320 320 V355 H90 V355" marker-end="url(#ca)" />
+  <text class="lbl" x="200" y="372" text-anchor="middle">监控反馈 · 异常自动回滚</text>
+</svg>
+</div>
+
+<h3>.gitlab-ci.yml 关键阶段</h3>
+<div class="code-block"><span class="cmt"># .gitlab-ci.yml — OA 系统 CI/CD 流水线定义</span>
+stages:
+  - lint
+  - build
+  - test
+  - push
+  - deploy-staging
+  - approval
+  - deploy-prod
+
+<span class="cmt"># 阶段1: 代码检查</span>
+lint:
+  stage: lint
+  image: node:<span class="num">20</span>-alpine
+  script:
+    - npm ci
+    - npm run lint
+    - <span class="kw">echo</span> <span class="str">"Lint passed"</span>
+  rules:
+    - <span class="kw">if</span>: $CI_PIPELINE_SOURCE == <span class="str">"merge_request_event"</span>
+
+<span class="cmt"># 阶段2: 构建</span>
+build:
+  stage: build
+  image: maven:<span class="num">3.9</span>-eclipse-temurin-<span class="num">21</span>
+  script:
+    - mvn clean package -DskipTests
+    - docker build -t $HARBOR_URL/oa-workflow:$CI_COMMIT_SHORT_SHA .
+  artifacts:
+    paths:
+      - target/*.jar
+
+<span class="cmt"># 阶段3: 测试 (单元 + 质量 + 安全)</span>
+test:
+  stage: test
+  script:
+    - mvn test                    <span class="cmt"># 单元测试，覆盖率 ≥80%</span>
+    - sonar-scanner               <span class="cmt"># SonarQube 代码质量</span>
+    - trivy image --exit-code <span class="num">1</span> $HARBOR_URL/oa-workflow:$CI_COMMIT_SHORT_SHA
+  coverage: <span class="str">'/Total.*?(\d+\.\d+)%/'</span>
+
+<span class="cmt"># 阶段4: 推送镜像到 Harbor</span>
+push:
+  stage: push
+  script:
+    - docker push $HARBOR_URL/oa-workflow:$CI_COMMIT_SHORT_SHA
+    - docker tag  $HARBOR_URL/oa-workflow:$CI_COMMIT_SHORT_SHA $HARBOR_URL/oa-workflow:latest
+    - docker push $HARBOR_URL/oa-workflow:latest
+  rules:
+    - <span class="kw">if</span>: $CI_COMMIT_BRANCH == <span class="str">"main"</span>
+
+<span class="cmt"># 阶段5: 自动部署到 Staging</span>
+deploy-staging:
+  stage: deploy-staging
+  script:
+    - argocd app sync oa-staging --prune
+    - argocd app wait oa-staging --timeout <span class="num">300</span>
+  environment:
+    name: staging
+
+<span class="cmt"># 阶段6: 生产部署审批门禁</span>
+approval:
+  stage: approval
+  script:
+    - <span class="kw">echo</span> <span class="str">"等待人工审批..."</span>
+  when: manual                       <span class="cmt"># 需手动点击通过</span>
+  allow_failure: <span class="kw">false</span>
+
+<span class="cmt"># 阶段7: 滚动部署到生产</span>
+deploy-prod:
+  stage: deploy-prod
+  script:
+    - argocd app sync oa-prod --prune
+    - argocd app wait oa-prod --timeout <span class="num">600</span>
+  environment:
+    name: production
+  rules:
+    - <span class="kw">if</span>: $CI_COMMIT_BRANCH == <span class="str">"main"</span></div>
+
+<h3>部署策略</h3>
+<table>
+<tr><th>环境</th><th>策略</th><th>说明</th></tr>
+<tr><td>Staging</td><td>Rolling Update</td><td>滚动更新，maxUnavailable=1, maxSurge=1</td></tr>
+<tr><td>Production</td><td>Canary → Full</td><td>ArgoCD + Istio：先切 10% 流量灰度 10 分钟，健康指标正常后全量</td></tr>
+<tr><td>Rollback</td><td>ArgoCD Rollback</td><td>一键回滚至上一 Revision，<code>argocd app rollback oa-prod</code></td></tr>
+</table>
+
+<!-- ==================== Section 6 ==================== -->
+<h2 id="sec6">6. 监控与可观测性</h2>
+
+<div class="card svg-wrap">
+<svg viewBox="0 0 860 200" aria-label="监控架构">
+  <defs>
+    <marker id="ma" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="arr-head" d="M1 1 L7 4 L1 7 Z" />
+    </marker>
+  </defs>
+  <text class="t-title" x="430" y="24" text-anchor="middle">可观测性三支柱 · Metrics · Logs · Traces</text>
+
+  <!-- Sources -->
+  <g class="c-neutral"><rect x="30" y="50" width="120" height="40" rx="8" /><text class="th" x="90" y="74" text-anchor="middle" style="font-size:12px">微服务 Pod</text></g>
+  <g class="c-neutral"><rect x="30" y="100" width="120" height="40" rx="8" /><text class="th" x="90" y="124" text-anchor="middle" style="font-size:12px">MySQL/Redis</text></g>
+  <g class="c-neutral"><rect x="30" y="150" width="120" height="40" rx="8" /><text class="th" x="90" y="174" text-anchor="middle" style="font-size:12px">K8s Node</text></g>
+
+  <!-- Metrics -->
+  <path class="arr" d="M150 70 H205" marker-end="url(#ma)" />
+  <g class="c-brand"><rect x="210" y="50" width="120" height="40" rx="8" /><text class="th" x="270" y="74" text-anchor="middle" style="font-size:12px">Prometheus</text><text class="ts" x="270" y="86" text-anchor="middle" style="font-size:11px">指标采集</text></g>
+  <path class="arr" d="M330 70 H380" marker-end="url(#ma)" />
+  <g class="c-brand"><rect x="385" y="50" width="120" height="40" rx="8" /><text class="th" x="445" y="74" text-anchor="middle" style="font-size:12px">Grafana</text><text class="ts" x="445" y="86" text-anchor="middle" style="font-size:11px">可视化看板</text></g>
+
+  <!-- Logs -->
+  <path class="arr" d="M150 120 H205" marker-end="url(#ma)" />
+  <g class="c-accent"><rect x="210" y="100" width="120" height="40" rx="8" /><text class="th" x="270" y="124" text-anchor="middle" style="font-size:12px">Fluent Bit</text><text class="ts" x="270" y="136" text-anchor="middle" style="font-size:11px">日志采集</text></g>
+  <path class="arr" d="M330 120 H380" marker-end="url(#ma)" />
+  <g class="c-accent"><rect x="385" y="100" width="120" height="40" rx="8" /><text class="th" x="445" y="124" text-anchor="middle" style="font-size:12px">Loki</text><text class="ts" x="445" y="136" text-anchor="middle" style="font-size:11px">日志聚合</text></g>
+
+  <!-- Traces -->
+  <path class="arr" d="M150 170 H205" marker-end="url(#ma)" />
+  <g class="c-neutral"><rect x="210" y="150" width="120" height="40" rx="8" /><text class="th" x="270" y="174" text-anchor="middle" style="font-size:12px">Jaeger Agent</text><text class="ts" x="270" y="186" text-anchor="middle" style="font-size:11px">链路上报</text></g>
+  <path class="arr" d="M330 170 H380" marker-end="url(#ma)" />
+  <g class="c-neutral"><rect x="385" y="150" width="120" height="40" rx="8" /><text class="th" x="445" y="174" text-anchor="middle" style="font-size:12px">Jaeger UI</text><text class="ts" x="445" y="186" text-anchor="middle" style="font-size:11px">链路追踪</text></g>
+
+  <!-- Alert -->
+  <path class="arr" d="M505 70 V160 H545" marker-end="url(#ma)" />
+  <g class="c-danger"><rect x="550" y="140" width="130" height="44" rx="8" /><text class="th" x="615" y="160" text-anchor="middle" style="font-size:12px">AlertManager</text><text class="ts" x="615" y="176" text-anchor="middle" style="font-size:11px">告警路由 · 去重</text></g>
+  <path class="arr" d="M680 162 H715" marker-end="url(#ma)" />
+  <g class="c-warning"><rect x="720" y="140" width="110" height="44" rx="8" /><text class="th" x="775" y="160" text-anchor="middle" style="font-size:12px">通知通道</text><text class="ts" x="775" y="176" text-anchor="middle" style="font-size:11px">企微 · 邮件 · SMS</text></g>
+</svg>
+</div>
+
+<h3>核心监控指标</h3>
+<table>
+<tr><th>分类</th><th>指标</th><th>告警阈值</th><th>说明</th></tr>
+<tr><td>基础设施</td><td>Node CPU 使用率</td><td>>85% 持续 5min</td><td>Prometheus node_exporter</td></tr>
+<tr><td>基础设施</td><td>Node 内存使用率</td><td>>90% 持续 5min</td><td>触发 Pod 驱逐前预警</td></tr>
+<tr><td>容器</td><td>Pod 重启次数</td><td>>3 次/10min</td><td>CrashLoopBackOff 预警</td></tr>
+<tr><td>应用</td><td>API P99 延迟</td><td>>500ms 持续 5min</td><td>Istio 指标</td></tr>
+<tr><td>应用</td><td>HTTP 5xx 错误率</td><td>>1% 持续 2min</td><td>触发自动回滚</td></tr>
+<tr><td>业务</td><td>流程实例积压</td><td>>100 待办未处理</td><td>定时巡检 + 业务大盘</td></tr>
+<tr><td>业务</td><td>任务超时未签收</td><td>超 due_at 30min</td><td>提醒审批人 + 上级</td></tr>
+<tr><td>数据库</td><td>MySQL 慢查询</td><td>>1s 持续 3min</td><td>pt-query-digest</td></tr>
+</table>
+
+<div class="note">
+<strong>Grafana 看板规划：</strong><br>
+• 集群总览 — 节点资源、Pod 状态、HPA 扩缩事件<br>
+• 微服务健康 — QPS / 延迟 / 错误率 / 熔断次数（按服务分页）<br>
+• 业务运营 — 流程发起量 / 待办积压 / 超时率 / 审批平均耗时<br>
+• 数据库 — 连接池 / QPS / 慢查询 / 主从延迟<br>
+• 告警大屏 — 实时告警列表 + 值班轮换
+</div>
+
+</body>
+</html>

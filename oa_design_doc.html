@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OA 系统设计方案</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface: #F7F7F8;
+  --surface-muted: #EFEFF2;
+  --text: #171717;
+  --text-muted: #52525B;
+  --border: rgba(23, 23, 23, 0.12);
+  --brand: #4B3FE3;
+  --brand-soft: #F2F7FF;
+  --brand-soft-strong: #E5EAFF;
+  --brand-text: #1A1759;
+  --brand-on: #FFFFFF;
+  --chart-series-1: #3C2ECA;
+  --chart-series-2: #A9AEFF;
+  --chart-series-3: #6F6FFF;
+  --chart-series-4: #22A5F7;
+  --accent: #27D2BF;
+  --accent-soft: #EAFBF8;
+  --accent-text: #0F766E;
+  --success: #1DC981;
+  --warning: #EFAA17;
+  --danger: #E8463A;
+  --radius: 8px;
+  --radius-card: 12px;
+  --radius-full: 999px;
+  --spacer-4: 4px;
+  --spacer-8: 8px;
+  --spacer-12: 12px;
+  --spacer-16: 16px;
+  --spacer-20: 20px;
+  --spacer-24: 24px;
+  --spacer-32: 32px;
+  --font-sans: "SF Pro Text", "PingFang SC", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-strong: 600;
+  --text-caption: 12px/18px;
+  --text-body: 14px/20px;
+  --text-title: 16px/24px;
+  --text-code: 13px/20px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --surface: #171717;
+    --surface-muted: #262626;
+    --text: #E5E5E5;
+    --text-muted: #A1A1AA;
+    --border: rgba(229, 229, 229, 0.12);
+    --brand: #6054F1;
+    --brand-soft: #1A1759;
+    --brand-soft-strong: #3C2ECA;
+    --brand-text: #CFD8FF;
+    --accent-soft: #123F3C;
+    --accent-text: #CCFBF1;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--surface);
+  color: var(--text);
+  font: var(--weight-regular) var(--text-body) var(--font-sans);
+  line-height: 1.6;
+  padding: var(--spacer-24);
+  max-width: 960px;
+  margin: 0 auto;
+}
+h1 { font: var(--weight-strong) 24px/32px var(--font-sans); margin-bottom: var(--spacer-8); }
+h2 {
+  font: var(--weight-strong) 20px/28px var(--font-sans);
+  margin-top: var(--spacer-32);
+  margin-bottom: var(--spacer-12);
+  padding-bottom: var(--spacer-8);
+  border-bottom: 2px solid var(--brand);
+  color: var(--text);
+}
+h3 {
+  font: var(--weight-medium) var(--text-title) var(--font-sans);
+  margin-top: var(--spacer-24);
+  margin-bottom: var(--spacer-8);
+}
+p { margin-bottom: var(--spacer-12); }
+.code-inline {
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+  background: var(--surface-muted);
+  padding: 1px 6px;
+  border-radius: var(--radius);
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--spacer-20);
+  margin-bottom: var(--spacer-16);
+  overflow-x: auto;
+}
+.svg-wrap { width: 100%; margin: var(--spacer-16) 0; }
+.svg-wrap svg { width: 100%; height: auto; display: block; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--spacer-12) 0;
+  font-size: var(--text-body);
+}
+th, td {
+  text-align: left;
+  padding: var(--spacer-8) var(--spacer-12);
+  border-bottom: 1px solid var(--border);
+}
+th {
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+  font-size: var(--text-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+td code { font-family: var(--font-mono); font-size: var(--text-code); }
+.toc {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--spacer-20);
+  margin-bottom: var(--spacer-24);
+}
+.toc-title { font-weight: var(--weight-medium); margin-bottom: var(--spacer-8); }
+.toc a { display: block; color: var(--brand); text-decoration: none; padding: 2px 0; font-size: var(--text-body); }
+.toc a:hover { text-decoration: underline; }
+.note {
+  background: var(--brand-soft);
+  border-left: 3px solid var(--brand);
+  padding: var(--spacer-12) var(--spacer-16);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  margin: var(--spacer-12) 0;
+  color: var(--brand-text);
+  font-size: var(--text-caption);
+}
+/* SVG styles */
+.t-title { fill: var(--text); font: var(--weight-medium) var(--text-title) var(--font-sans); }
+.th { fill: var(--text); font: var(--weight-medium) var(--text-body) var(--font-sans); }
+.ts { fill: var(--text-muted); font: var(--weight-regular) var(--text-caption) var(--font-sans); }
+.tl { fill: var(--text-muted); font: var(--weight-medium) var(--text-caption) var(--font-sans); }
+.tf { fill: var(--text-muted); font: var(--weight-regular) var(--text-caption) var(--font-mono); }
+.lbl { fill: var(--text-muted); font: var(--weight-medium) var(--text-caption) var(--font-sans); }
+.lbl-bg { fill: var(--surface); stroke: var(--border); stroke-width: 1; }
+g.c-neutral > rect, g.c-neutral > polygon { fill: var(--surface); stroke: var(--border); stroke-width: 1.5; }
+g.c-brand > rect { fill: var(--brand-soft); stroke: var(--brand); stroke-width: 1.5; }
+g.c-brand .th { fill: var(--brand-text); }
+g.c-brand .ts { fill: var(--brand); }
+g.c-accent > rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+g.c-accent .th { fill: var(--accent-text); }
+g.c-accent .ts { fill: var(--accent); }
+g.c-success > rect { fill: color-mix(in srgb, var(--success) 14%, transparent); stroke: var(--success); stroke-width: 1.5; }
+g.c-success .th { fill: var(--text); }
+g.c-warning > rect { fill: color-mix(in srgb, var(--warning) 14%, transparent); stroke: var(--warning); stroke-width: 1.5; }
+g.c-warning .th { fill: var(--text); }
+g.c-danger > rect { fill: color-mix(in srgb, var(--danger) 14%, transparent); stroke: var(--danger); stroke-width: 1.5; }
+g.c-danger .th { fill: var(--text); }
+g.c-boundary > rect { fill: color-mix(in srgb, var(--surface-muted) 50%, transparent); stroke: var(--border); stroke-width: 1.5; stroke-dasharray: 6 5; }
+.arr { stroke: color-mix(in srgb, var(--text-muted) 60%, transparent); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.arr-dashed { stroke-dasharray: 5 5; }
+.arr-head { fill: color-mix(in srgb, var(--text-muted) 72%, transparent); }
+.api-method {
+  display: inline-block;
+  min-width: 48px;
+  text-align: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font: var(--weight-medium) var(--text-caption) var(--font-mono);
+  border: 1.5px solid;
+  background: var(--surface);
+}
+.api-method[data-m="POST"] { color: var(--brand); border-color: var(--brand); }
+.api-method[data-m="GET"] { color: var(--chart-series-4); border-color: var(--chart-series-4); }
+.api-method[data-m="PUT"] { color: var(--warning); border-color: var(--warning); }
+.api-method[data-m="DELETE"] { color: var(--danger); border-color: var(--danger); }
+</style>
+</head>
+<body>
+
+<h1>OA 系统设计方案</h1>
+<p>版本 1.0 · 2026-08-29</p>
+
+<div class="toc">
+  <div class="toc-title">目录</div>
+  <a href="#sec1">1. 整体架构</a>
+  <a href="#sec2">2. 工作流引擎设计</a>
+  <a href="#sec3">3. 数据模型与 ER 关系</a>
+  <a href="#sec4">4. API 接口设计</a>
+  <a href="#sec5">5. 审批流转状态机</a>
+</div>
+
+<!-- ==================== Section 1 ==================== -->
+<h2 id="sec1">1. 整体架构</h2>
+<p>系统采用五层分层架构，从接入层到基础设施层，各层职责清晰、解耦分明。</p>
+
+<div class="card svg-wrap">
+<svg viewBox="0 0 720 545" aria-label="OA系统架构图">
+  <defs>
+    <marker id="oaArrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="arr-head" d="M1 1 L7 4 L1 7 Z" />
+    </marker>
+  </defs>
+  <text class="t-title" x="360" y="28" text-anchor="middle">OA 系统整体架构</text>
+  <text class="tl" x="40" y="54">接入层</text>
+  <g class="c-neutral"><rect x="70" y="62" width="160" height="48" rx="8" /><text class="th" x="150" y="80" text-anchor="middle">Web 端</text><text class="ts" x="150" y="98" text-anchor="middle">浏览器</text></g>
+  <g class="c-neutral"><rect x="280" y="62" width="160" height="48" rx="8" /><text class="th" x="360" y="80" text-anchor="middle">移动 App</text><text class="ts" x="360" y="98" text-anchor="middle">iOS / Android</text></g>
+  <g class="c-neutral"><rect x="490" y="62" width="160" height="48" rx="8" /><text class="th" x="570" y="80" text-anchor="middle">企微 / 钉钉</text><text class="ts" x="570" y="98" text-anchor="middle">第三方入口</text></g>
+  <path class="arr" d="M150 110 V120" /><path class="arr" d="M360 110 V120" /><path class="arr" d="M570 110 V120" /><path class="arr" d="M150 120 H570" /><path class="arr" d="M360 120 V136" marker-end="url(#oaArrow)" />
+  <text class="tl" x="40" y="134">网关层</text>
+  <g class="c-brand"><rect x="210" y="138" width="300" height="48" rx="8" /><text class="th" x="360" y="156" text-anchor="middle">API 网关</text><text class="ts" x="360" y="174" text-anchor="middle">鉴权 · 路由 · 限流</text></g>
+  <path class="arr" d="M360 186 V208" marker-end="url(#oaArrow)" />
+  <text class="tl" x="40" y="204">应用服务层</text>
+  <g class="c-boundary"><rect x="30" y="212" width="660" height="170" rx="12" /><text class="ts" x="670" y="230" text-anchor="end">微服务架构</text></g>
+  <g class="c-neutral"><rect x="50" y="240" width="190" height="48" rx="8" /><text class="th" x="145" y="258" text-anchor="middle">用户与组织</text><text class="ts" x="145" y="276" text-anchor="middle">RBAC · SSO</text></g>
+  <g class="c-brand"><rect x="265" y="240" width="190" height="48" rx="8" /><text class="th" x="360" y="258" text-anchor="middle">工作流引擎</text><text class="ts" x="360" y="276" text-anchor="middle">流程定义 · 调度</text></g>
+  <g class="c-neutral"><rect x="480" y="240" width="190" height="48" rx="8" /><text class="th" x="575" y="258" text-anchor="middle">公文管理</text><text class="ts" x="575" y="276" text-anchor="middle">拟稿 · 归档</text></g>
+  <g class="c-neutral"><rect x="50" y="308" width="190" height="48" rx="8" /><text class="th" x="145" y="326" text-anchor="middle">审批管理</text><text class="ts" x="145" y="344" text-anchor="middle">多级 · 会签</text></g>
+  <g class="c-neutral"><rect x="265" y="308" width="190" height="48" rx="8" /><text class="th" x="360" y="326" text-anchor="middle">日程与任务</text><text class="ts" x="360" y="344" text-anchor="middle">待办 · 提醒</text></g>
+  <g class="c-neutral"><rect x="480" y="308" width="190" height="48" rx="8" /><text class="th" x="575" y="326" text-anchor="middle">消息通知</text><text class="ts" x="575" y="344" text-anchor="middle">站内信 · 推送</text></g>
+  <path class="arr" d="M360 382 V404" marker-end="url(#oaArrow)" />
+  <text class="tl" x="40" y="400">数据存储层</text>
+  <g class="c-neutral"><rect x="40" y="408" width="145" height="48" rx="8" /><text class="th" x="112" y="426" text-anchor="middle">MySQL</text><text class="ts" x="112" y="444" text-anchor="middle">业务数据</text></g>
+  <g class="c-neutral"><rect x="205" y="408" width="145" height="48" rx="8" /><text class="th" x="277" y="426" text-anchor="middle">Redis</text><text class="ts" x="277" y="444" text-anchor="middle">缓存 · 会话</text></g>
+  <g class="c-neutral"><rect x="370" y="408" width="145" height="48" rx="8" /><text class="th" x="442" y="426" text-anchor="middle">对象存储</text><text class="ts" x="442" y="444" text-anchor="middle">文件 · 附件</text></g>
+  <g class="c-neutral"><rect x="535" y="408" width="145" height="48" rx="8" /><text class="th" x="607" y="426" text-anchor="middle">ElasticSearch</text><text class="ts" x="607" y="444" text-anchor="middle">全文检索</text></g>
+  <text class="tl" x="40" y="472">基础设施</text>
+  <g class="c-boundary"><rect x="40" y="480" width="640" height="40" rx="8" /><text class="ts" x="360" y="505" text-anchor="middle">消息队列  ·  日志监控  ·  配置中心  ·  CI/CD</text></g>
+</svg>
+</div>
+
+<h3>架构分层说明</h3>
+<p><strong>接入层</strong> — 统一多端入口：Web SPA、移动 App、企微/钉钉第三方接入，三端共用同一套 API。</p>
+<p><strong>网关层</strong> — API 网关（架构焦点）：统一鉴权（JWT/OAuth2）、路由分发、限流熔断、请求日志。</p>
+<p><strong>应用服务层</strong> — 6 大微服务：用户与组织、工作流引擎（核心）、公文管理、审批管理、日程与任务、消息通知。</p>
+<p><strong>数据存储层</strong> — 混合存储：MySQL（业务数据）、Redis（缓存/会话）、对象存储（文件）、ElasticSearch（全文检索）。</p>
+<p><strong>基础设施</strong> — 横切关注点：消息队列、日志监控、配置中心、CI/CD。</p>
+
+<table>
+<tr><th>决策点</th><th>方案</th><th>理由</th></tr>
+<tr><td>服务拆分</td><td>按业务域垂直拆分</td><td>工作流、公文、审批各自独立演进</td></tr>
+<tr><td>工作流引擎</td><td>集成 Flowable/Activiti</td><td>OA 核心能力，需灵活定制审批流</td></tr>
+<tr><td>通信方式</td><td>同步 REST + 异步消息</td><td>公文流转同步，通知推送异步</td></tr>
+<tr><td>多端适配</td><td>API 网关统一入口</td><td>避免各端各自实现鉴权逻辑</td></tr>
+</table>
+
+<!-- ==================== Section 2 ==================== -->
+<h2 id="sec2">2. 工作流引擎设计</h2>
+
+<div class="card svg-wrap">
+<svg viewBox="0 0 720 452" aria-label="工作流引擎流程图">
+  <defs>
+    <marker id="wfA" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="arr-head" d="M1 1 L7 4 L1 7 Z" />
+    </marker>
+  </defs>
+  <text class="t-title" x="360" y="24" text-anchor="middle">工作流引擎 · 报销审批示例</text>
+  <g class="c-success"><rect x="320" y="40" width="80" height="32" rx="16" /><text class="th" x="360" y="60" text-anchor="middle">开始</text></g>
+  <path class="arr" d="M360 72 V98" marker-end="url(#wfA)" />
+  <g class="c-brand"><rect x="270" y="100" width="180" height="40" rx="8" /><text class="th" x="360" y="120" text-anchor="middle">部门经理审批</text><text class="ts" x="360" y="136" text-anchor="middle">单人审批</text></g>
+  <path class="arr arr-dashed" d="M270 120 H210 V56 H318" marker-end="url(#wfA)" />
+  <rect class="lbl-bg" x="195" y="78" width="30" height="20" rx="4" /><text class="lbl" x="210" y="92" text-anchor="middle">驳回</text>
+  <path class="arr" d="M360 140 V158" marker-end="url(#wfA)" />
+  <g class="c-neutral"><polygon points="360,160 440,188 360,216 280,188" /><text class="th" x="360" y="184" text-anchor="middle">金额&gt;1万?</text><text class="ts" x="360" y="200" text-anchor="middle">条件分支</text></g>
+  <path class="arr" d="M280 188 H180 V248" marker-end="url(#wfA)" />
+  <rect class="lbl-bg" x="220" y="178" width="20" height="20" rx="4" /><text class="lbl" x="230" y="192" text-anchor="middle">是</text>
+  <path class="arr" d="M440 188 H540 V350 H452" marker-end="url(#wfA)" />
+  <rect class="lbl-bg" x="480" y="178" width="20" height="20" rx="4" /><text class="lbl" x="490" y="192" text-anchor="middle">否</text>
+  <g class="c-brand"><rect x="110" y="250" width="140" height="40" rx="8" /><text class="th" x="180" y="270" text-anchor="middle">总经理审批</text><text class="ts" x="180" y="286" text-anchor="middle">单人审批</text></g>
+  <path class="arr" d="M180 290 V350 H268" marker-end="url(#wfA)" />
+  <g class="c-accent"><rect x="270" y="330" width="180" height="40" rx="8" /><text class="th" x="360" y="350" text-anchor="middle">会签 · 财务+法务</text><text class="ts" x="360" y="366" text-anchor="middle">并行审批</text></g>
+  <path class="arr" d="M360 370 V398" marker-end="url(#wfA)" />
+  <g class="c-neutral"><rect x="320" y="400" width="80" height="32" rx="16" /><text class="th" x="360" y="420" text-anchor="middle">结束</text></g>
+</svg>
+</div>
+
+<h3>流程定义模型</h3>
+<table>
+<tr><th>概念</th><th>说明</th><th>关键字段</th></tr>
+<tr><td>流程定义 ProcessDefinition</td><td>审批流程的模板蓝图</td><td><code>id, name, version, status, node_json</code></td></tr>
+<tr><td>流程实例 ProcessInstance</td><td>一次具体的审批申请</td><td><code>id, def_id, initiator_id, status, business_data</code></td></tr>
+<tr><td>节点 Node</td><td>流程中的审批/分支环节</td><td><code>id, def_id, type, name, assignee_type</code></td></tr>
+<tr><td>连线 Transition</td><td>节点间的流转路径</td><td><code>id, from_node, to_node, condition_expr</code></td></tr>
+</table>
+
+<h3>5 种节点类型</h3>
+<table>
+<tr><th>类型</th><th>图示</th><th>说明</th></tr>
+<tr><td>开始节点</td><td>胶囊形</td><td>标记流程入口，自动创建第一个任务</td></tr>
+<tr><td>审批节点</td><td>矩形 (brand)</td><td>支持单人审批、多人会签、或签三种模式</td></tr>
+<tr><td>条件节点</td><td>菱形</td><td>基于表达式（如金额阈值）做分支路由</td></tr>
+<tr><td>并行节点</td><td>矩形 (accent)</td><td>同时分发给多人，全部完成才汇聚</td></tr>
+<tr><td>结束节点</td><td>胶囊形</td><td>标记流程完结，触发归档/通知</td></tr>
+</table>
+
+<h3>流转规则</h3>
+<table>
+<tr><th>规则</th><th>说明</th></tr>
+<tr><td>顺序流转</td><td>默认路径，上一节点完成自动激活下一节点</td></tr>
+<tr><td>条件分支</td><td>菱形节点求值 <code>condition_expr</code>，匹配的出口连线激活</td></tr>
+<tr><td>并行汇聚</td><td>会签节点所有审批人完成后，汇聚到下一节点</td></tr>
+<tr><td>驳回退回</td><td>虚线箭头，可退回到任意前序节点</td></tr>
+<tr><td>加签/转办</td><td>审批中动态追加审批人或转交他人，不改变流程拓扑</td></tr>
+</table>
+
+<!-- ==================== Section 3 ==================== -->
+<h2 id="sec3">3. 数据模型与 ER 关系</h2>
+
+<div class="card svg-wrap">
+<svg viewBox="0 0 720 400" aria-label="ER关系图">
+  <defs>
+    <marker id="erA" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="arr-head" d="M1 1 L7 4 L1 7 Z" />
+    </marker>
+  </defs>
+  <text class="t-title" x="360" y="24" text-anchor="middle">OA 核心数据模型 · ER 关系图</text>
+  <g class="c-boundary"><rect x="20" y="50" width="190" height="240" rx="12" /><text class="tl" x="30" y="68">用户域</text></g>
+  <g class="c-neutral"><rect x="40" y="78" width="150" height="72" rx="8" /><text class="th" x="115" y="96" text-anchor="middle">组织</text><text class="ts" x="115" y="112" text-anchor="middle">organization</text><text class="tf" x="50" y="130">PK id</text><text class="tf" x="50" y="146">FK parent_id</text></g>
+  <g class="c-neutral"><rect x="40" y="170" width="150" height="88" rx="8" /><text class="th" x="115" y="188" text-anchor="middle">用户</text><text class="ts" x="115" y="204" text-anchor="middle">user</text><text class="tf" x="50" y="222">PK id</text><text class="tf" x="50" y="238">name · email</text><text class="tf" x="50" y="254">FK org_id</text></g>
+  <g class="c-boundary"><rect x="240" y="50" width="200" height="340" rx="12" /><text class="tl" x="250" y="68">流程域</text></g>
+  <g class="c-neutral"><rect x="260" y="78" width="160" height="72" rx="8" /><text class="th" x="340" y="96" text-anchor="middle">流程定义</text><text class="ts" x="340" y="112" text-anchor="middle">process_definition</text><text class="tf" x="270" y="130">PK id</text><text class="tf" x="270" y="146">version · status</text></g>
+  <g class="c-brand"><rect x="260" y="170" width="160" height="88" rx="8" /><text class="th" x="340" y="188" text-anchor="middle">流程实例</text><text class="ts" x="340" y="204" text-anchor="middle">process_instance</text><text class="tf" x="270" y="222">PK id</text><text class="tf" x="270" y="238">FK def_id</text><text class="tf" x="270" y="254">FK initiator_id</text></g>
+  <g class="c-neutral"><rect x="260" y="278" width="160" height="88" rx="8" /><text class="th" x="340" y="296" text-anchor="middle">任务</text><text class="ts" x="340" y="312" text-anchor="middle">task</text><text class="tf" x="270" y="330">PK id</text><text class="tf" x="270" y="346">FK instance_id</text><text class="tf" x="270" y="362">FK assignee_id</text></g>
+  <g class="c-boundary"><rect x="470" y="50" width="210" height="250" rx="12" /><text class="tl" x="480" y="68">业务域</text></g>
+  <g class="c-neutral"><rect x="490" y="78" width="170" height="88" rx="8" /><text class="th" x="575" y="96" text-anchor="middle">公文</text><text class="ts" x="575" y="112" text-anchor="middle">document</text><text class="tf" x="500" y="130">PK id</text><text class="tf" x="500" y="146">title · content</text><text class="tf" x="500" y="162">FK instance_id</text></g>
+  <g class="c-neutral"><rect x="490" y="186" width="170" height="88" rx="8" /><text class="th" x="575" y="204" text-anchor="middle">审批记录</text><text class="ts" x="575" y="220" text-anchor="middle">approval_record</text><text class="tf" x="500" y="238">PK id</text><text class="tf" x="500" y="254">FK task_id</text><text class="tf" x="500" y="270">FK user_id</text></g>
+  <path class="arr" d="M115 170 V152" marker-end="url(#erA)" />
+  <path class="arr" d="M340 170 V152" marker-end="url(#erA)" />
+  <path class="arr" d="M260 214 H192" marker-end="url(#erA)" />
+  <path class="arr" d="M340 278 V260" marker-end="url(#erA)" />
+  <path class="arr" d="M260 322 H220 V230 H192" marker-end="url(#erA)" />
+  <path class="arr" d="M490 162 H450 V214 H422" marker-end="url(#erA)" />
+  <path class="arr" d="M490 238 H450 V322 H422" marker-end="url(#erA)" />
+</svg>
+</div>
+
+<h3>核心表说明</h3>
+<table>
+<tr><th>表名</th><th>所属域</th><th>职责</th><th>关键外键</th></tr>
+<tr><td>organization</td><td>用户域</td><td>组织架构树，支持自引用</td><td>parent_id → self</td></tr>
+<tr><td>user</td><td>用户域</td><td>用户账号与基本信息</td><td>org_id → organization</td></tr>
+<tr><td>process_definition</td><td>流程域</td><td>流程模板蓝图，含版本管理</td><td>—</td></tr>
+<tr><td>process_instance</td><td>流程域</td><td>一次具体审批申请（核心枢纽）</td><td>def_id, initiator_id</td></tr>
+<tr><td>task</td><td>流程域</td><td>待办任务，每节点生成一条</td><td>instance_id, assignee_id</td></tr>
+<tr><td>document</td><td>业务域</td><td>公文正文与附件</td><td>instance_id</td></tr>
+<tr><td>approval_record</td><td>业务域</td><td>审批操作留痕</td><td>task_id, user_id</td></tr>
+</table>
+
+<div class="note">
+  补充表（未在图中展示）：<code>user_role</code>（用户-角色多对多关联）、<code>role</code>（角色表）、<code>node_definition</code>（节点定义表，存储类型与审批人规则）。
+  <br>设计要点：<code>approval_record</code> 独立于 <code>task</code>，确保即使任务被重分配，审批历史也不会丢失。
+</div>
+
+<!-- ==================== Section 4 ==================== -->
+<h2 id="sec4">4. API 接口设计</h2>
+<p>采用标准 RESTful 规范，按业务域分组，共 17 个核心接口。</p>
+<div class="note">
+  RESTful 约定：资源命名用复数名词 · 嵌套路由 <code>/api/{parent}/{id}/{child}</code> · 非 CRUD 动作用 <code>/{action}</code> 后缀 · 统一响应 <code>{ code, message, data }</code> · 分页 <code>?page=1&amp;size=20</code>
+</div>
+
+<h3>用户认证</h3>
+<table>
+<tr><th>Method</th><th>Path</th><th>说明</th></tr>
+<tr><td><span class="api-method" data-m="POST">POST</span></td><td><code>/api/auth/login</code></td><td>登录，返回 JWT</td></tr>
+<tr><td><span class="api-method" data-m="POST">POST</span></td><td><code>/api/auth/logout</code></td><td>登出，失效 Token</td></tr>
+<tr><td><span class="api-method" data-m="GET">GET</span></td><td><code>/api/auth/profile</code></td><td>当前用户信息</td></tr>
+<tr><td><span class="api-method" data-m="GET">GET</span></td><td><code>/api/users</code></td><td>用户列表（分页）</td></tr>
+<tr><td><span class="api-method" data-m="GET">GET</span></td><td><code>/api/organizations</code></td><td>组织架构树</td></tr>
+</table>
+
+<h3>流程管理</h3>
+<table>
+<tr><th>Method</th><th>Path</th><th>说明</th></tr>
+<tr><td><span class="api-method" data-m="GET">GET</span></td><td><code>/api/process-definitions</code></td><td>流程定义列表</td></tr>
+<tr><td><span class="api-method" data-m="POST">POST</span></td><td><code>/api/process-definitions</code></td><td>创建流程定义</td></tr>
+<tr><td><span class="api-method" data-m="POST">POST</span></td><td><code>/api/process-instances</code></td><td>发起流程实例</td></tr>
+<tr><td><span class="api-method" data-m="GET">GET</span></td><td><code>/api/process-instances/{id}</code></td><td>流程实例详情</td></tr>
+<tr><td><span class="api-method" data-m="POST">POST</span></td><td><code>/api/process-instances/{id}/cancel</code></td><td>撤销流程</td></tr>
+</table>
+
+<h3>任务管理</h3>
+<table>
+<tr><th>Method</th><th>Path</th><th>说明</th></tr>
+<tr><td><span class="api-method" data-m="GET">GET</span></td><td><code>/api/tasks</code></td><td>当前用户待办列表</td></tr>
+<tr><td><span class="api-method" data-m="GET">GET</span></td><td><code>/api/tasks/{id}</code></td><td>任务详情（含审批表单）</td></tr>
+<tr><td><span class="api-method" data-m="POST">POST</span></td><td><code>/api/tasks/{id}/complete</code></td><td>完成审批（通过）</td></tr>
+<tr><td><span class="api-method" data-m="POST">POST</span></td><td><code>/api/tasks/{id}/reject</code></td><td>驳回至指定节点</td></tr>
+<tr><td><span class="api-method" data-m="POST">POST</span></td><td><code>/api/tasks/{id}/transfer</code></td><td>转办给他人</td></tr>
+</table>
+
+<h3>公文管理</h3>
+<table>
+<tr><th>Method</th><th>Path</th><th>说明</th></tr>
+<tr><td><span class="api-method" data-m="POST">POST</span></td><td><code>/api/documents</code></td><td>创建公文</td></tr>
+<tr><td><span class="api-method" data-m="GET">GET</span></td><td><code>/api/documents</code></td><td>公文列表（分页）</td></tr>
+<tr><td><span class="api-method" data-m="GET">GET</span></td><td><code>/api/documents/{id}</code></td><td>公文详情</td></tr>
+<tr><td><span class="api-method" data-m="PUT">PUT</span></td><td><code>/api/documents/{id}</code></td><td>更新公文内容</td></tr>
+<tr><td><span class="api-method" data-m="POST">POST</span></td><td><code>/api/documents/{id}/archive</code></td><td>归档公文</td></tr>
+</table>
+
+<p>状态码约定：<code>200</code> 成功 · <code>201</code> 创建 · <code>400</code> 参数错误 · <code>401</code> 未认证 · <code>403</code> 无权限 · <code>404</code> 不存在 · <code>500</code> 服务器错误</p>
+
+<!-- ==================== Section 5 ==================== -->
+<h2 id="sec5">5. 审批流转状态机</h2>
+
+<div class="card svg-wrap">
+<svg viewBox="0 0 720 400" aria-label="状态机图">
+  <defs>
+    <marker id="smA" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="arr-head" d="M1 1 L7 4 L1 7 Z" />
+    </marker>
+  </defs>
+  <text class="t-title" x="360" y="24" text-anchor="middle">OA 状态机 · 流程与任务</text>
+  <g class="c-boundary"><rect x="60" y="50" width="580" height="150" rx="12" /><text class="tl" x="70" y="68">流程实例状态</text></g>
+  <g class="c-neutral"><rect x="80" y="80" width="100" height="40" rx="8" /><text class="th" x="130" y="105" text-anchor="middle">草稿</text></g>
+  <path class="arr" d="M180 100 H298" marker-end="url(#smA)" /><text class="lbl" x="240" y="92" text-anchor="middle">提交</text>
+  <g class="c-brand"><rect x="300" y="80" width="100" height="40" rx="8" /><text class="th" x="350" y="105" text-anchor="middle">进行中</text></g>
+  <path class="arr" d="M400 100 H518" marker-end="url(#smA)" /><text class="lbl" x="460" y="92" text-anchor="middle">全通过</text>
+  <g class="c-success"><rect x="520" y="80" width="100" height="40" rx="8" /><text class="th" x="570" y="105" text-anchor="middle">已完成</text></g>
+  <path class="arr" d="M350 120 V153" marker-end="url(#smA)" /><text class="lbl" x="365" y="140">撤回</text>
+  <g class="c-danger"><rect x="300" y="155" width="100" height="40" rx="8" /><text class="th" x="350" y="180" text-anchor="middle">已撤销</text></g>
+  <g class="c-boundary"><rect x="60" y="220" width="580" height="170" rx="12" /><text class="tl" x="70" y="238">任务状态</text></g>
+  <g class="c-neutral"><rect x="80" y="250" width="100" height="40" rx="8" /><text class="th" x="130" y="275" text-anchor="middle">待处理</text></g>
+  <path class="arr" d="M180 270 H298" marker-end="url(#smA)" /><text class="lbl" x="240" y="262" text-anchor="middle">签收</text>
+  <g class="c-brand"><rect x="300" y="250" width="100" height="40" rx="8" /><text class="th" x="350" y="275" text-anchor="middle">处理中</text></g>
+  <path class="arr" d="M400 258 L518 265" marker-end="url(#smA)" /><text class="lbl" x="445" y="255" text-anchor="middle">通过</text>
+  <g class="c-success"><rect x="520" y="245" width="100" height="40" rx="8" /><text class="th" x="570" y="270" text-anchor="middle">已通过</text></g>
+  <path class="arr" d="M400 270 L518 315" marker-end="url(#smA)" /><text class="lbl" x="445" y="282" text-anchor="middle">驳回</text>
+  <g class="c-danger"><rect x="520" y="295" width="100" height="40" rx="8" /><text class="th" x="570" y="320" text-anchor="middle">已驳回</text></g>
+  <path class="arr" d="M400 282 L518 365" marker-end="url(#smA)" /><text class="lbl" x="445" y="302" text-anchor="middle">转办</text>
+  <g class="c-warning"><rect x="520" y="345" width="100" height="40" rx="8" /><text class="th" x="570" y="370" text-anchor="middle">已转办</text></g>
+</svg>
+</div>
+
+<h3>流程实例状态</h3>
+<table>
+<tr><th>状态</th><th>说明</th><th>流转触发</th></tr>
+<tr><td>草稿 DRAFT</td><td>发起人编辑中，未提交</td><td>提交 → 进行中</td></tr>
+<tr><td>进行中 RUNNING</td><td>流程已启动，节点流转中</td><td>全通过 → 已完成 · 撤回 → 已撤销</td></tr>
+<tr><td>已完成 COMPLETED</td><td>所有节点通过，流程归档</td><td>终态</td></tr>
+<tr><td>已撤销 CANCELLED</td><td>发起人主动撤销</td><td>终态</td></tr>
+</table>
+
+<h3>任务状态</h3>
+<table>
+<tr><th>状态</th><th>说明</th><th>流转触发</th></tr>
+<tr><td>待处理 PENDING</td><td>任务已生成，等待签收</td><td>签收 → 处理中</td></tr>
+<tr><td>处理中 PROCESSING</td><td>审批人已接手</td><td>通过 → 已通过 · 驳回 → 已驳回 · 转办 → 已转办</td></tr>
+<tr><td>已通过 APPROVED</td><td>审批同意，激活下一节点</td><td>终态</td></tr>
+<tr><td>已驳回 REJECTED</td><td>审批不同意，退回指定节点</td><td>终态（可触发新任务）</td></tr>
+<tr><td>已转办 TRANSFERRED</td><td>转交他人处理，生成新任务</td><td>终态（触发新待办）</td></tr>
+</table>
+
+<div class="note">
+  设计要点：驳回不终止流程——退回到指定节点后重新生成待处理任务。转办不改流程拓扑，仅替换 assignee 并记录审批留痕。撤销仅发起人可操作，且仅在流程未完成时可用。
+</div>
+
+</body>
+</html>

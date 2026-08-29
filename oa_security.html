@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OA 系统 · 安全设计</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface: #F7F7F8;
+  --surface-muted: #EFEFF2;
+  --text: #171717;
+  --text-muted: #52525B;
+  --border: rgba(23, 23, 23, 0.12);
+  --brand: #4B3FE3;
+  --brand-soft: #F2F7FF;
+  --brand-soft-strong: #E5EAFF;
+  --brand-text: #1A1759;
+  --accent: #27D2BF;
+  --accent-soft: #EAFBF8;
+  --accent-text: #0F766E;
+  --success: #1DC981;
+  --warning: #EFAA17;
+  --danger: #E8463A;
+  --code-bg: #1E1E2E;
+  --code-text: #CDD6F4;
+  --radius: 8px;
+  --radius-card: 12px;
+  --spacer-4: 4px;
+  --spacer-8: 8px;
+  --spacer-12: 12px;
+  --spacer-16: 16px;
+  --spacer-20: 20px;
+  --spacer-24: 24px;
+  --spacer-32: 32px;
+  --font-sans: "SF Pro Text", "PingFang SC", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-strong: 600;
+  --text-caption: 12px/18px;
+  --text-body: 14px/20px;
+  --text-title: 16px/24px;
+  --text-code: 13px/20px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #171717;
+    --surface-muted: #262626;
+    --text: #E5E5E5;
+    --text-muted: #A1A1AA;
+    --border: rgba(229, 229, 229, 0.12);
+    --brand: #6054F1;
+    --brand-soft: #1A1759;
+    --brand-soft-strong: #3C2ECA;
+    --brand-text: #CFD8FF;
+    --accent-soft: #123F3C;
+    --accent-text: #CCFBF1;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--surface);
+  color: var(--text);
+  font: var(--weight-regular) var(--text-body) var(--font-sans);
+  line-height: 1.6;
+  padding: var(--spacer-24);
+  max-width: 1080px;
+  margin: 0 auto;
+}
+h1 { font: var(--weight-strong) 24px/32px var(--font-sans); margin-bottom: var(--spacer-8); }
+h2 {
+  font: var(--weight-strong) 20px/28px var(--font-sans);
+  margin-top: var(--spacer-32);
+  margin-bottom: var(--spacer-12);
+  padding-bottom: var(--spacer-8);
+  border-bottom: 2px solid var(--brand);
+}
+h3 {
+  font: var(--weight-medium) var(--text-title) var(--font-sans);
+  margin-top: var(--spacer-24);
+  margin-bottom: var(--spacer-8);
+}
+p { margin-bottom: var(--spacer-12); }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--spacer-20);
+  margin-bottom: var(--spacer-16);
+  overflow-x: auto;
+}
+.svg-wrap { width: 100%; margin: var(--spacer-16) 0; }
+.svg-wrap svg { width: 100%; height: auto; display: block; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--spacer-12) 0;
+  font-size: var(--text-body);
+}
+th, td {
+  text-align: left;
+  padding: var(--spacer-8) var(--spacer-12);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+th {
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+  font-size: var(--text-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+td code, p code {
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+  background: var(--surface-muted);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.code-block {
+  background: var(--code-bg);
+  border-radius: var(--radius-card);
+  padding: var(--spacer-20);
+  margin: var(--spacer-12) 0;
+  overflow-x: auto;
+  font: var(--weight-regular) 13px/22px var(--font-mono);
+  color: var(--code-text);
+  white-space: pre;
+}
+.code-block .kw { color: #CBA6F7; }
+.code-block .str { color: #A6E3A1; }
+.code-block .cmt { color: #6C7086; font-style: italic; }
+.code-block .num { color: #FAB387; }
+.toc {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--spacer-20);
+  margin-bottom: var(--spacer-24);
+}
+.toc-title { font-weight: var(--weight-medium); margin-bottom: var(--spacer-8); }
+.toc a { display: block; color: var(--brand); text-decoration: none; padding: 2px 0; font-size: var(--text-body); }
+.toc a:hover { text-decoration: underline; }
+.note {
+  background: var(--brand-soft);
+  border-left: 3px solid var(--brand);
+  padding: var(--spacer-12) var(--spacer-16);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  margin: var(--spacer-12) 0;
+  color: var(--brand-text);
+  font-size: var(--text-caption);
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font: var(--weight-medium) 11px/16px var(--font-sans);
+  letter-spacing: 0.03em;
+}
+.badge-allow { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
+.badge-deny { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.badge-own { background: color-mix(in srgb, var(--warning) 14%, transparent); color: var(--warning); }
+.badge-brand { background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--brand); }
+
+/* SVG styles */
+.t-title { fill: var(--text); font: var(--weight-medium) var(--text-title) var(--font-sans); }
+.th { fill: var(--text); font: var(--weight-medium) var(--text-body) var(--font-sans); }
+.ts { fill: var(--text-muted); font: var(--weight-regular) var(--text-caption) var(--font-sans); }
+.tl { fill: var(--text-muted); font: var(--weight-medium) var(--text-caption) var(--font-sans); }
+.tf { fill: var(--text-muted); font: var(--weight-regular) 11px/16px var(--font-mono); }
+.lbl { fill: var(--text-muted); font: var(--weight-medium) 11px/16px var(--font-sans); }
+.lbl-bg { fill: var(--surface); stroke: var(--border); stroke-width: 1; }
+g.c-neutral > rect, g.c-neutral > polygon { fill: var(--surface); stroke: var(--border); stroke-width: 1.5; }
+g.c-brand > rect { fill: var(--brand-soft); stroke: var(--brand); stroke-width: 1.5; }
+g.c-brand .th { fill: var(--brand-text); }
+g.c-brand .ts { fill: var(--brand); }
+g.c-accent > rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+g.c-accent .th { fill: var(--accent-text); }
+g.c-success > rect { fill: color-mix(in srgb, var(--success) 14%, transparent); stroke: var(--success); stroke-width: 1.5; }
+g.c-warning > rect { fill: color-mix(in srgb, var(--warning) 14%, transparent); stroke: var(--warning); stroke-width: 1.5; }
+g.c-danger > rect { fill: color-mix(in srgb, var(--danger) 14%, transparent); stroke: var(--danger); stroke-width: 1.5; }
+g.c-boundary > rect { fill: color-mix(in srgb, var(--surface-muted) 50%, transparent); stroke: var(--border); stroke-width: 1.5; stroke-dasharray: 6 5; }
+.arr { stroke: color-mix(in srgb, var(--text-muted) 60%, transparent); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.arr-dashed { stroke-dasharray: 5 5; }
+.arr-head { fill: color-mix(in srgb, var(--text-muted) 72%, transparent); }
+.arr-success { stroke: var(--success); }
+.arr-success-head { fill: var(--success); }
+.arr-danger { stroke: var(--danger); }
+.arr-danger-head { fill: var(--danger); }
+</style>
+</head>
+<body>
+
+<h1>OA 系统 · 安全设计</h1>
+<p>版本 1.0 · 2026-08-29 · 认证：JWT + Refresh Token · 授权：RBAC · 传输：TLS 1.3</p>
+
+<div class="toc">
+  <div class="toc-title">目录</div>
+  <a href="#sec1">1. JWT 鉴权流程</a>
+  <a href="#sec2">2. Token 结构与刷新机制</a>
+  <a href="#sec3">3. RBAC 权限模型</a>
+  <a href="#sec4">4. 权限矩阵</a>
+  <a href="#sec5">5. 接口级访问控制</a>
+  <a href="#sec6">6. 安全防护清单</a>
+</div>
+
+<!-- ==================== Section 1 ==================== -->
+<h2 id="sec1">1. JWT 鉴权流程</h2>
+
+<div class="card svg-wrap">
+<svg viewBox="0 0 880 560" aria-label="JWT鉴权流程图">
+  <defs>
+    <marker id="ja" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="arr-head" d="M1 1 L7 4 L1 7 Z" />
+    </marker>
+    <marker id="jas" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="arr-success-head" d="M1 1 L7 4 L1 7 Z" />
+    </marker>
+    <marker id="jad" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="arr-danger-head" d="M1 1 L7 4 L1 7 Z" />
+    </marker>
+  </defs>
+  <text class="t-title" x="440" y="24" text-anchor="middle">JWT 鉴权流程 · 登录 → 验证 → 刷新 → 登出</text>
+
+  <!-- Actors -->
+  <g class="c-neutral"><rect x="30" y="50" width="120" height="500" rx="8" /><text class="th" x="90" y="74" text-anchor="middle">客户端</text>
+    <text class="ts" x="90" y="92" text-anchor="middle">Web / App</text>
+    <text class="tf" x="50" y="120">1. 输入账号密码</text>
+    <text class="tf" x="50" y="200">4. 存储 Token</text>
+    <text class="tf" x="50" y="208" style="font-size:10px">  localStorage + 内存</text>
+    <text class="tf" x="50" y="310">7. 携带 Token</text>
+    <text class="tf" x="50" y="318" style="font-size:10px">  Authorization: Bearer</text>
+    <text class="tf" x="50" y="420">10. Access Token</text>
+    <text class="tf" x="50" y="428" style="font-size:10px">  过期 → 用 Refresh</text>
+    <text class="tf" x="50" y="436" style="font-size:10px">  换新 Token</text>
+    <text class="tf" x="50" y="510">14. 清除本地 Token</text>
+  </g>
+
+  <g class="c-brand"><rect x="250" y="50" width="160" height="500" rx="8" /><text class="th" x="330" y="74" text-anchor="middle">API 网关</text><text class="ts" x="330" y="92" text-anchor="middle">Gateway</text>
+    <text class="tf" x="270" y="120">2. 转发登录请求</text>
+    <text class="tf" x="270" y="310">8. 提取 & 验证 JWT</text>
+    <text class="tf" x="270" y="318" style="font-size:10px">  无状态校验签名</text>
+    <text class="tf" x="270" y="420">11. 转发刷新请求</text>
+    <text class="tf" x="270" y="510">13. 失效 Token 检查</text>
+  </g>
+
+  <g class="c-accent"><rect x="510" y="50" width="160" height="500" rx="8" /><text class="th" x="590" y="74" text-anchor="middle">认证服务</text><text class="ts" x="590" y="92" text-anchor="middle">Auth Service</text>
+    <text class="tf" x="530" y="120">3. 验证密码</text>
+    <text class="tf" x="530" y="128" style="font-size:10px">  bcrypt 校验</text>
+    <text class="tf" x="530" y="200">5. 生成 Token 对</text>
+    <text class="tf" x="530" y="208" style="font-size:10px">  Access 30min</text>
+    <text class="tf" x="530" y="216" style="font-size:10px">  Refresh 7day</text>
+    <text class="tf" x="530" y="420">12. 验证 Refresh</text>
+    <text class="tf" x="530" y="428" style="font-size:10px">  Redis 黑名单检查</text>
+    <text class="tf" x="530" y="510">— </text>
+  </g>
+
+  <g class="c-neutral"><rect x="730" y="50" width="120" height="220" rx="8" /><text class="th" x="790" y="74" text-anchor="middle">Redis</text><text class="ts" x="790" y="92" text-anchor="middle">缓存</text>
+    <text class="tf" x="750" y="120">Refresh Token</text>
+    <text class="tf" x="750" y="128" style="font-size:10px">  白名单存储</text>
+    <text class="tf" x="750" y="200">登录失败计数</text>
+    <text class="tf" x="750" y="208" style="font-size:10px">  5次 → 锁定</text>
+  </g>
+
+  <g class="c-neutral"><rect x="730" y="290" width="120" height="260" rx="8" /><text class="th" x="790" y="314" text-anchor="middle">MySQL</text><text class="ts" x="790" y="332" text-anchor="middle">数据库</text>
+    <text class="tf" x="750" y="360">user 表</text>
+    <text class="tf" x="750" y="368" style="font-size:10px">  密码哈希</text>
+    <text class="tf" x="750" y="376" style="font-size:10px">  角色关联</text>
+    <text class="tf" x="750" y="420">user_role 表</text>
+    <text class="tf" x="750" y="428" style="font-size:10px">  权限快照</text>
+  </g>
+
+  <!-- Flow arrows -->
+  <!-- Login flow -->
+  <path class="arr arr-success" d="M150 115 H250" marker-end="url(#jas)" />
+  <text class="lbl" x="200" y="108" text-anchor="middle" style="fill:var(--success)">① 登录</text>
+  <path class="arr arr-success" d="M410 115 H510" marker-end="url(#jas)" />
+  <path class="arr arr-success" d="M670 115 H730" marker-end="url(#jas)" />
+  <text class="lbl" x="700" y="108" text-anchor="middle" style="fill:var(--success)">②</text>
+
+  <!-- Token return -->
+  <path class="arr arr-success" d="M730 195 H670" marker-end="url(#jas)" />
+  <path class="arr arr-success" d="M510 195 H410" marker-end="url(#jas)" />
+  <path class="arr arr-success" d="M250 195 H150" marker-end="url(#jas)" />
+  <text class="lbl" x="200" y="188" text-anchor="middle" style="fill:var(--success)">③ 返回 Token</text>
+
+  <!-- API request -->
+  <path class="arr" d="M150 305 H250" marker-end="url(#ja)" />
+  <text class="lbl" x="200" y="298" text-anchor="middle">④ 携带 Token</text>
+  <path class="arr arr-success" d="M330 328 V250 H790 V220" marker-end="url(#jas)" />
+  <text class="lbl" x="440" y="244" style="fill:var(--success)">⑤ 检查黑名单</text>
+  <path class="arr arr-success" d="M410 320 H510" marker-end="url(#jas)" />
+  <text class="lbl" x="460" y="312" text-anchor="middle" style="fill:var(--success)">⑥ 路由</text>
+
+  <!-- Refresh flow -->
+  <path class="arr arr-dashed" d="M150 415 H250" marker-end="url(#ja)" />
+  <text class="lbl" x="200" y="408" text-anchor="middle">⑦ 刷新请求</text>
+  <path class="arr arr-dashed" d="M410 415 H510" marker-end="url(#ja)" />
+  <path class="arr arr-dashed" d="M590 388 V290 H790 V260" marker-end="url(#ja)" />
+  <text class="lbl" x="440" y="280" style="fill:var(--text-muted)">⑧ 验证 Refresh</text>
+  <path class="arr arr-dashed" d="M510 415 H410" marker-end="url(#ja)" />
+  <path class="arr arr-dashed" d="M250 415 H150" marker-end="url(#ja)" />
+  <text class="lbl" x="200" y="408" text-anchor="middle" style="fill:var(--text-muted)">⑨ 返回新 Token</text>
+
+  <!-- Logout flow -->
+  <path class="arr arr-danger" d="M150 505 H250" marker-end="url(#jad)" />
+  <text class="lbl" x="200" y="498" text-anchor="middle" style="fill:var(--danger)">⑩ 登出</text>
+  <path class="arr arr-danger" d="M330 490 V460 H790 V330" marker-end="url(#jad)" />
+  <text class="lbl" x="440" y="454" style="fill:var(--danger)">⑪ 加入黑名单</text>
+  <path class="arr arr-danger" d="M250 505 H150" marker-end="url(#jad)" />
+  <text class="lbl" x="200" y="498" text-anchor="middle" style="fill:var(--danger)">⑫ 返回成功</text>
+</svg>
+</div>
+
+<h3>鉴权流程步骤说明</h3>
+<table>
+<tr><th>步骤</th><th>动作</th><th>组件</th><th>说明</th></tr>
+<tr><td>①</td><td>登录请求</td><td>客户端 → 网关 → 认证服务</td><td>POST <code>/api/auth/login</code>，携带 <code>username + password</code></td></tr>
+<tr><td>②</td><td>密码校验</td><td>认证服务 → MySQL</td><td>bcrypt 校验密码哈希，查 <code>user</code> 表</td></tr>
+<tr><td>③</td><td>签发 Token</td><td>认证服务 → Redis → 网关 → 客户端</td><td>生成 Access Token（30min）+ Refresh Token（7day），Refresh 存入 Redis 白名单</td></tr>
+<tr><td>④</td><td>API 请求</td><td>客户端 → 网关</td><td>Header: <code>Authorization: Bearer &lt;access_token&gt;</code></td></tr>
+<tr><td>⑤</td><td>JWT 验证</td><td>网关 → Redis</td><td>无状态验证签名 + 过期时间 + Redis 黑名单检查（登出过的 Token）</td></tr>
+<tr><td>⑥</td><td>路由分发</td><td>网关 → 微服务</td><td>解析 JWT claims，将 <code>userId</code> / <code>roles</code> 注入请求头转发</td></tr>
+<tr><td>⑦~⑨</td><td>Token 刷新</td><td>客户端 → 认证服务 → Redis</td><td>Access 过期后用 Refresh 换新对，Refresh 验证 Redis 白名单 + 旋转（旧 Refresh 失效）</td></tr>
+<tr><td>⑩~⑫</td><td>登出</td><td>客户端 → 网关 → Redis</td><td>将当前 Token 加入 Redis 黑名单（TTL = Token 剩余有效期），客户端清除本地存储</td></tr>
+</table>
+
+<!-- ==================== Section 2 ==================== -->
+<h2 id="sec2">2. Token 结构与刷新机制</h2>
+
+<h3>JWT Payload (Claims) 结构</h3>
+<div class="code-block"><span class="cmt">// Access Token Payload — 短期令牌（30分钟）</span>
+{
+  <span class="str">"iss"</span>: <span class="str">"oa-auth-service"</span>,          <span class="cmt">// 签发方</span>
+  <span class="str">"sub"</span>: <span class="str">"1024"</span>,                    <span class="cmt">// userId</span>
+  <span class="str">"aud"</span>: <span class="str">"oa-gateway"</span>,              <span class="cmt">// 接收方</span>
+  <span class="str">"iat"</span>: <span class="num">1724923200</span>,                  <span class="cmt">// 签发时间</span>
+  <span class="exp"</span>: <span class="num">1724925000</span>,                 <span class="cmt">// 过期时间 (iat + 30min)</span>
+  <span class="str">"jti"</span>: <span class="str">"a1b2c3d4-e5f6-7890"</span>,      <span class="cmt">// 唯一标识 (防重放)</span>
+  <span class="str">"name"</span>: <span class="str">"周锐杰"</span>,                  <span class="cmt">// 用户姓名快照</span>
+  <span class="str">"roles"</span>: [<span class="str">"MANAGER"</span>, <span class="str">"APPROVER"</span>],  <span class="cmt">// 角色编码列表</span>
+  <span class="str">"org_id"</span>: <span class="num">5</span>,                       <span class="cmt">// 组织ID</span>
+  <span class="str">"perms"</span>: [<span class="str">"task:approve"</span>, <span class="str">"doc:read"</span>]  <span class="cmt">// 权限码 (可选, 减少DB查询)</span>
+}
+
+<span class="cmt">// Refresh Token Payload — 长期令牌（7天）</span>
+{
+  <span class="str">"iss"</span>: <span class="str">"oa-auth-service"</span>,
+  <span class="str">"sub"</span>: <span class="str">"1024"</span>,
+  <span class="str">"iat"</span>: <span class="num">1724923200</span>,
+  <span class="exp"</span>: <span class="num">1725528000</span>,                 <span class="cmt">// iat + 7天</span>
+  <span class="str">"jti"</span>: <span class="str">"r9s8t7u6-v5w4-x3y2"</span>,      <span class="cmt">// 不同于 Access 的 jti</span>
+  <span class="str">"type"</span>: <span class="str">"refresh"</span>                 <span class="cmt">// 标记为刷新令牌</span>
+}</div>
+
+<h3>Token 刷新策略 — 滑动过期 + 旋转</h3>
+<div class="card svg-wrap">
+<svg viewBox="0 0 860 180" aria-label="Token刷新时序">
+  <defs>
+    <marker id="ta" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="arr-head" d="M1 1 L7 4 L1 7 Z" />
+    </marker>
+  </defs>
+  <text class="t-title" x="430" y="24" text-anchor="middle">Token 生命周期与刷新时序</text>
+  <line x1="40" y1="100" x2="820" y2="100" stroke="var(--border)" stroke-width="1.5" />
+  <text class="tl" x="40" y="88">时间</text>
+
+  <g class="c-brand"><rect x="60" y="108" width="120" height="28" rx="6" /><text class="th" x="120" y="126" text-anchor="middle" style="font-size:12px">Access #1</text></g>
+  <line x1="60" y1="95" x2="60" y2="108" stroke="var(--brand)" stroke-width="1.5" />
+  <text class="ts" x="60" y="88" style="font-size:11px">T0 登录</text>
+  <text class="ts" x="120" y="148" text-anchor="middle" style="font-size:11px">30min</text>
+
+  <g class="c-accent"><rect x="60" y="48" width="280" height="28" rx="6" /><text class="th" x="200" y="66" text-anchor="middle" style="font-size:12px">Refresh #1</text></g>
+  <text class="ts" x="200" y="42" text-anchor="middle" style="font-size:11px">7天</text>
+
+  <path class="arr" d="M180 122 V80 H340" marker-end="url(#ta)" />
+  <rect class="lbl-bg" x="220" y="74" width="80" height="20" rx="4" /><text class="lbl" x="260" y="88" text-anchor="middle">过期, 用Refresh换新</text>
+
+  <g class="c-brand"><rect x="340" y="108" width="120" height="28" rx="6" /><text class="th" x="400" y="126" text-anchor="middle" style="font-size:12px">Access #2</text></g>
+  <line x1="340" y1="95" x2="340" y2="108" stroke="var(--brand)" stroke-width="1.5" />
+  <text class="ts" x="340" y="88" style="font-size:11px">T+30min 刷新</text>
+
+  <g class="c-accent"><rect x="340" y="48" width="280" height="28" rx="6" /><text class="th" x="480" y="66" text-anchor="middle" style="font-size:12px">Refresh #2 (旋转)</text></g>
+  <text class="ts" x="480" y="42" text-anchor="middle" style="font-size:11px">旧 Refresh #1 立即失效</text>
+
+  <path class="arr arr-dashed" d="M620 62 V100" marker-end="url(#ta)" />
+  <rect class="lbl-bg" x="625" y="78" width="100" height="20" rx="4" /><text class="lbl" x="675" y="92" text-anchor="middle">7天后自然过期</text>
+
+  <g class="c-danger"><rect x="620" y="108" width="120" height="28" rx="6" /><text class="th" x="680" y="126" text-anchor="middle" style="font-size:12px">需重新登录</text></g>
+</svg>
+</div>
+
+<div class="note">
+<strong>Refresh Token 旋转（Rotation）：</strong>每次用 Refresh Token 换取新 Access Token 时，旧 Refresh Token 立即失效（从 Redis 白名单删除），同时签发新的 Refresh Token。这样即使 Refresh Token 被窃取，攻击者最多只能使用一次，合法用户下次刷新时会发现 Token 失效从而触发重新登录。
+</div>
+
+<h3>密码安全策略</h3>
+<table>
+<tr><th>策略</th><th>规则</th><th>实现</th></tr>
+<tr><td>哈希算法</td><td>bcrypt, cost=12</td><td>BCryptPasswordEncoder（Spring Security）</td></tr>
+<tr><td>密码复杂度</td><td>≥8位，含大小写+数字+特殊字符</td><td>正则校验 <code>^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$</code></td></tr>
+<tr><td>登录失败锁定</td><td>连续5次失败 → 账号锁定30分钟</td><td>Redis 计数 <code>login_fail:{userId}</code>，TTL=30min</td></tr>
+<tr><td>密码过期</td><td>90天强制修改</td><td><code>user.updated_at</code> 对比，登录时检查</td></tr>
+<tr><td>历史密码</td><td>不能与最近3次重复</td><td>存储 <code>password_history</code> 表</td></tr>
+</table>
+
+<!-- ==================== Section 3 ==================== -->
+<h2 id="sec3">3. RBAC 权限模型</h2>
+
+<div class="card svg-wrap">
+<svg viewBox="0 0 720 320" aria-label="RBAC模型">
+  <defs>
+    <marker id="ra" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="arr-head" d="M1 1 L7 4 L1 7 Z" />
+    </marker>
+  </defs>
+  <text class="t-title" x="360" y="24" text-anchor="middle">RBAC 模型 · 用户 → 角色 → 权限 → 资源</text>
+
+  <!-- User -->
+  <g class="c-brand"><rect x="40" y="60" width="120" height="44" rx="8" /><text class="th" x="100" y="80" text-anchor="middle">用户 User</text><text class="ts" x="100" y="96" text-anchor="middle">user 表</text></g>
+  <g class="c-neutral"><rect x="40" y="120" width="120" height="44" rx="8" /><text class="th" x="100" y="140" text-anchor="middle">周锐杰</text><text class="ts" x="100" y="156" text-anchor="middle">user_id=1024</text></g>
+
+  <path class="arr" d="M160 142 H220" marker-end="url(#ra)" />
+  <text class="lbl" x="190" y="134" text-anchor="middle">N:N</text>
+
+  <!-- Role -->
+  <g class="c-brand"><rect x="230" y="60" width="120" height="44" rx="8" /><text class="th" x="290" y="80" text-anchor="middle">角色 Role</text><text class="ts" x="290" y="96" text-anchor="middle">role / user_role 表</text></g>
+  <g class="c-neutral"><rect x="230" y="120" width="120" height="36" rx="8" /><text class="th" x="290" y="142" text-anchor="middle" style="font-size:12px">部门经理</text></g>
+  <g class="c-neutral"><rect x="230" y="164" width="120" height="36" rx="8" /><text class="th" x="290" y="186" text-anchor="middle" style="font-size:12px">审批人</text></g>
+
+  <path class="arr" d="M350 142 H410" marker-end="url(#ra)" />
+  <text class="lbl" x="380" y="134" text-anchor="middle">N:N</text>
+
+  <!-- Permission -->
+  <g class="c-brand"><rect x="420" y="60" width="120" height="44" rx="8" /><text class="th" x="480" y="80" text-anchor="middle">权限 Permission</text><text class="ts" x="480" y="96" text-anchor="middle">权限码</text></g>
+  <g class="c-neutral"><rect x="420" y="120" width="120" height="28" rx="6" /><text class="th" x="480" y="138" text-anchor="middle" style="font-size:11px">task:approve</text></g>
+  <g class="c-neutral"><rect x="420" y="152" width="120" height="28" rx="6" /><text class="th" x="480" y="170" text-anchor="middle" style="font-size:11px">task:reject</text></g>
+  <g class="c-neutral"><rect x="420" y="184" width="120" height="28" rx="6" /><text class="th" x="480" y="202" text-anchor="middle" style="font-size:11px">doc:read</text></g>
+  <g class="c-neutral"><rect x="420" y="216" width="120" height="28" rx="6" /><text class="th" x="480" y="234" text-anchor="middle" style="font-size:11px">doc:write</text></g>
+
+  <path class="arr" d="M540 170 H600" marker-end="url(#ra)" />
+
+  <!-- Resource -->
+  <g class="c-brand"><rect x="610" y="120" width="90" height="44" rx="8" /><text class="th" x="655" y="140" text-anchor="middle">资源</text><text class="ts" x="655" y="156" text-anchor="middle">API/数据</text></g>
+  <g class="c-neutral"><rect x="610" y="176" width="90" height="28" rx="6" /><text class="th" x="655" y="194" text-anchor="middle" style="font-size:11px">POST /tasks</text></g>
+  <g class="c-neutral"><rect x="610" y="208" width="90" height="28" rx="6" /><text class="th" x="655" y="226" text-anchor="middle" style="font-size:11px">/tasks/:id</text></g>
+
+  <!-- Data scope -->
+  <text class="tl" x="40" y="264">数据范围控制 (Data Scope)</text>
+  <g class="c-accent"><rect x="40" y="272" width="160" height="32" rx="8" /><text class="th" x="120" y="292" text-anchor="middle" style="font-size:12px">ALL — 全部数据</text></g>
+  <g class="c-accent"><rect x="210" y="272" width="160" height="32" rx="8" /><text class="th" x="290" y="292" text-anchor="middle" style="font-size:12px">DEPT — 本部门</text></g>
+  <g class="c-accent"><rect x="380" y="272" width="160" height="32" rx="8" /><text class="th" x="460" y="292" text-anchor="middle" style="font-size:12px">DEPT_AND_SUB — 含子部门</text></g>
+  <g class="c-accent"><rect x="550" y="272" width="160" height="32" rx="8" /><text class="th" x="630" y="292" text-anchor="middle" style="font-size:12px">SELF — 仅本人</text></g>
+</svg>
+</div>
+
+<div class="note">
+<strong>双层权限控制：</strong><br>
+1. <strong>功能权限</strong>（Action Level）：角色 → 权限码 → API 接口，决定能否调用某接口<br>
+2. <strong>数据权限</strong>（Data Level）：数据范围 → SQL 拦截，决定能看到哪些数据行<br>
+例如「部门经理」角色有 <code>task:approve</code> 权限（功能），数据范围为 <code>DEPT_AND_SUB</code>（只能审批本部门及下属部门的任务）
+</div>
+
+<!-- ==================== Section 4 ==================== -->
+<h2 id="sec4">4. 权限矩阵</h2>
+
+<h3>角色定义</h3>
+<table>
+<tr><th>角色编码</th><th>角色名称</th><th>数据范围</th><th>说明</th></tr>
+<tr><td><code>SYSTEM_ADMIN</code></td><td>系统管理员</td><td><span class="badge badge-brand">ALL</span></td><td>系统配置、用户管理、流程定义管理</td></tr>
+<tr><td><code>GM</code></td><td>总经理</td><td><span class="badge badge-brand">ALL</span></td><td>高金额审批终审、公文签发</td></tr>
+<tr><td><code>MANAGER</code></td><td>部门经理</td><td><span class="badge badge-own">DEPT_AND_SUB</span></td><td>本部门流程审批、人员管理</td></tr>
+<tr><td><code>APPROVER</code></td><td>审批人</td><td><span class="badge badge-own">SELF</span></td><td>处理分配给自己的审批任务</td></tr>
+<tr><td><code>FINANCE</code></td><td>财务</td><td><span class="badge badge-own">DEPT</span></td><td>报销会签、财务类公文审核</td></tr>
+<tr><td><code>EMPLOYEE</code></td><td>普通员工</td><td><span class="badge badge-own">SELF</span></td><td>发起流程、查看自己的待办和公文</td></tr>
+</table>
+
+<h3>功能权限矩阵</h3>
+<table>
+<tr><th>权限码</th><th>操作</th><th>ADMIN</th><th>GM</th><th>MANAGER</th><th>APPROVER</th><th>FINANCE</th><th>EMPLOYEE</th></tr>
+<tr><td><code>auth:login</code></td><td>登录</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td></tr>
+<tr><td><code>auth:login</code></td><td>登出</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td></tr>
+<tr><td><code>user:read</code></td><td>查看用户</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-own">本人</span></td></tr>
+<tr><td><code>user:write</code></td><td>管理用户</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-deny">✗</span></td></tr>
+<tr><td><code>org:read</code></td><td>组织架构</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td></tr>
+<tr><td><code>process:def:read</code></td><td>查看流程定义</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-allow">✓</span></td></tr>
+<tr><td><code>process:def:write</code></td><td>创建/发布流程定义</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-deny">✗</span></td></tr>
+<tr><td><code>process:instance:create</code></td><td>发起流程</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td></tr>
+<tr><td><code>process:instance:cancel</code></td><td>撤销流程</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-own">本人发起</span></td></tr>
+<tr><td><code>process:instance:read</code></td><td>查看流程详情</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-own">参与</span></td><td><span class="badge badge-own">参与</span></td><td><span class="badge badge-own">本人发起</span></td></tr>
+<tr><td><code>task:read</code></td><td>查看待办</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-own">分配</span></td><td><span class="badge badge-own">分配</span></td><td><span class="badge badge-own">本人</span></td></tr>
+<tr><td><code>task:approve</code></td><td>审批通过</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-deny">✗</span></td></tr>
+<tr><td><code>task:reject</code></td><td>审批驳回</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-deny">✗</span></td></tr>
+<tr><td><code>task:transfer</code></td><td>转办</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-deny">✗</span></td></tr>
+<tr><td><code>doc:create</code></td><td>创建公文</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-allow">✓</span></td></tr>
+<tr><td><code>doc:read</code></td><td>查看公文</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-own">本人</span></td></tr>
+<tr><td><code>doc:write</code></td><td>编辑公文</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-own">本人草稿</span></td></tr>
+<tr><td><code>doc:archive</code></td><td>归档公文</td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-allow">✓</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-deny">✗</span></td><td><span class="badge badge-deny">✗</span></td></tr>
+</table>
+
+<!-- ==================== Section 5 ==================== -->
+<h2 id="sec5">5. 接口级访问控制</h2>
+
+<h3>注解式权限控制（Spring Security + 自定义注解）</h3>
+<div class="code-block"><span class="cmt">// 自定义权限注解</span>
+@Target({ElementType.METHOD, ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+@PreAuthorize(<span class="str">"hasPermission(#request, 'task:approve')"</span>)
+<span class="kw">public @interface</span> RequirePermission {
+    String value();
+}
+
+<span class="cmt">// Controller 层使用</span>
+@RestController
+@RequestMapping(<span class="str">"/api/tasks"</span>)
+<span class="kw">public class</span> TaskController {
+
+    <span class="cmt">// 审批通过 — 需要 task:approve 权限</span>
+    @PostMapping(<span class="str">"/{id}/complete"</span>)
+    @PreAuthorize(<span class="str">"hasAuthority('task:approve')"</span>)
+    <span class="kw">public</span> ApiResponse completeTask(@PathVariable Long id, @RequestBody @Valid TaskCompleteDTO dto) {
+        <span class="cmt">// 额外校验: 当前用户是否是该任务的 assignee</span>
+        taskService.validateAssignee(id, SecurityUtils.getCurrentUserId());
+        <span class="kw">return</span> ApiResponse.success(taskService.complete(id, dto));
+    }
+
+    <span class="cmt">// 驳回 — 需要 task:reject 权限</span>
+    @PostMapping(<span class="str">"/{id}/reject"</span>)
+    @PreAuthorize(<span class="str">"hasAuthority('task:reject')"</span>)
+    <span class="kw">public</span> ApiResponse rejectTask(@PathVariable Long id, @RequestBody @Valid TaskRejectDTO dto) {
+        taskService.validateAssignee(id, SecurityUtils.getCurrentUserId());
+        <span class="kw">return</span> ApiResponse.success(taskService.reject(id, dto));
+    }
+
+    <span class="cmt">// 转办 — 需要 task:transfer 权限</span>
+    @PostMapping(<span class="str">"/{id}/transfer"</span>)
+    @PreAuthorize(<span class="str">"hasAuthority('task:transfer')"</span>)
+    <span class="kw">public</span> ApiResponse transferTask(@PathVariable Long id, @RequestBody @Valid TaskTransferDTO dto) {
+        taskService.validateAssignee(id, SecurityUtils.getCurrentUserId());
+        <span class="kw">return</span> ApiResponse.success(taskService.transfer(id, dto));
+    }
+
+    <span class="cmt">// 待办列表 — 数据权限拦截</span>
+    @GetMapping
+    @PreAuthorize(<span class="str">"hasAuthority('task:read')"</span>)
+    <span class="kw">public</span> ApiResponse&lt;PageResult&lt;TaskVO&gt;&gt; getTasks(TaskQueryDTO query) {
+        <span class="cmt">// DataScopeInterceptor 自动注入数据范围条件</span>
+        <span class="cmt">// EMPLOYEE → WHERE assignee_id = currentUser</span>
+        <span class="cmt">// MANAGER  → WHERE assignee_id IN (deptUsers) OR assignee_id = currentUser</span>
+        <span class="kw">return</span> ApiResponse.success(taskService.findMyTasks(query));
+    }
+}</div>
+
+<h3>数据权限 SQL 拦截器原理</h3>
+<div class="card svg-wrap">
+<svg viewBox="0 0 860 200" aria-label="数据权限拦截">
+  <defs>
+    <marker id="da" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path class="arr-head" d="M1 1 L7 4 L1 7 Z" />
+    </marker>
+  </defs>
+  <text class="t-title" x="430" y="24" text-anchor="middle">数据权限拦截 · MyBatis 拦截器自动注入条件</text>
+
+  <g class="c-neutral"><rect x="30" y="50" width="200" height="36" rx="8" /><text class="th" x="130" y="73" text-anchor="middle" style="font-size:12px">原始 SQL</text></g>
+  <path class="arr" d="M230 68 H275" marker-end="url(#da)" />
+  <rect class="lbl-bg" x="238" y="54" width="40" height="20" rx="4" /><text class="lbl" x="258" y="68" text-anchor="middle">解析</text>
+
+  <g class="c-brand"><rect x="280" y="50" width="200" height="36" rx="8" /><text class="th" x="380" y="73" text-anchor="middle" style="font-size:12px">DataScope 拦截器</text></g>
+  <path class="arr" d="M480 68 H525" marker-end="url(#da)" />
+  <rect class="lbl-bg" x="488" y="54" width="40" height="20" rx="4" /><text class="lbl" x="508" y="68" text-anchor="middle">改写</text>
+
+  <g class="c-accent"><rect x="530" y="50" width="300" height="36" rx="8" /><text class="th" x="680" y="73" text-anchor="middle" style="font-size:12px">注入 WHERE 条件后的 SQL</text></g>
+
+  <g class="c-boundary"><rect x="30" y="100" width="800" height="90" rx="8" /></g>
+  <text class="tf" x="50" y="124">SELECT * FROM task WHERE status = 0</text>
+  <text class="ts" x="50" y="142">↑ 原始查询: 获取所有待处理任务</text>
+  <text class="tf" x="50" y="164" style="fill:var(--brand)">SELECT * FROM task WHERE status = 0 AND assignee_id = 1024</text>
+  <text class="ts" x="50" y="182" style="fill:var(--brand)">↑ 拦截后 (SELF): 只返回当前用户的任务</text>
+</svg>
+</div>
+
+<div class="note">
+拦截器根据 JWT 中的 <code>roles</code> 和 <code>org_id</code> 自动注入数据范围：<br>
+• <code>ALL</code> — 不注入额外条件<br>
+• <code>DEPT_AND_SUB</code> — <code>AND org_id IN (SELECT id FROM organization WHERE path LIKE CONCAT((SELECT path FROM organization WHERE id=?), '%'))</code><br>
+• <code>SELF</code> — <code>AND assignee_id = ?</code>（当前用户ID）<br>
+开发者无需手写数据范围判断，统一由拦截器处理，避免遗漏。
+</div>
+
+<!-- ==================== Section 6 ==================== -->
+<h2 id="sec6">6. 安全防护清单</h2>
+
+<table>
+<tr><th>类别</th><th>威胁</th><th>防护措施</th><th>实现</th></tr>
+<tr><td>认证</td><td>暴力破解</td><td>登录失败锁定 + IP 限流</td><td>Redis 计数 5次/30min + Nginx limit_req</td></tr>
+<tr><td>认证</td><td>Token 窃取</td><td>HTTPS + HttpOnly Cookie + Refresh 旋转</td><td>TLS 1.3 · 短期 Access Token</td></tr>
+<tr><td>认证</td><td>会话固定</td><td>登录后重新签发 Token</td><td>每次登录生成新 jti</td></tr>
+<tr><td>授权</td><td>越权访问</td><td>RBAC 注解 + 数据权限拦截器</td><td>@PreAuthorize + MyBatis Interceptor</td></tr>
+<tr><td>授权</td><td>IDOR (不安全直接对象引用)</td><td>资源归属校验</td><td><code>validateAssignee()</code> 等业务校验</td></tr>
+<tr><td>注入</td><td>SQL 注入</td><td>参数化查询 + 输入校验</td><td>MyBatis #{} 而非 ${} · @Valid</td></tr>
+<tr><td>注入</td><td>XSS</td><td>输出转义 + CSP 头</td><td>前端框架自动转义 · Content-Security-Policy</td></tr>
+<tr><td>注入</td><td>CSRF</td><td>JWT (Bearer) 无需 Cookie</td><td>Token 在 Header 中传递，不自动携带 Cookie</td></tr>
+<tr><td>传输</td><td>中间人攻击</td><td>TLS 1.3 + HSTS</td><td>Ingress 强制 HTTPS · HSTS 头</td></tr>
+<tr><td>传输</td><td>敏感数据泄露</td><td>日志脱敏 + 字段加密</td><td>密码/手机号/身份证 脱敏日志 · AES-256 存储</td></tr>
+<tr><td>审计</td><td>操作否认</td><td>审计日志不可篡改</td><td>approval_record 表 + 操作日志追加写</td></tr>
+<tr><td>审计</td><td>异常检测</td><td>行为分析 + 告警</td><td>ELK 异常行为规则 (异地登录/批量导出)</td></tr>
+<tr><td>基础设施</td><td>容器逃逸</td><td>非 root 运行 + readOnlyRootFS</td><td>SecurityContext: runAsNonRoot=true</td></tr>
+<tr><td>基础设施</td><td>密钥泄露</td><td>Vault + Sealed Secrets</td><td>Git 中无明文密钥</td></tr>
+<tr><td>依赖</td><td>已知漏洞</td><td>SCA 自动扫描</td><td>Trivy 镜像扫描 + Maven Dependency Check</td></tr>
+</table>
+
+<h3>HTTP 安全响应头</h3>
+<div class="code-block"><span class="cmt"># Nginx Ingress 安全头配置</span>
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers <span class="str">"Strict-Transport-Security: max-age=63072000; includeSubDomains; preload"</span>;
+      more_set_headers <span class="str">"X-Content-Type-Options: nosniff"</span>;
+      more_set_headers <span class="str">"X-Frame-Options: DENY"</span>;
+      more_set_headers <span class="str">"X-XSS-Protection: 1; mode=block"</span>;
+      more_set_headers <span class="str">"Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' wss:; font-src 'self'; object-src 'none'; frame-ancestors 'none';"</span>;
+      more_set_headers <span class="str">"Referrer-Policy: strict-origin-when-cross-origin"</span>;
+      more_set_headers <span class="str">"Permissions-Policy: geolocation=(), microphone=(), camera=()"</span>;</div>
+
+<div class="note">
+<strong>安全设计总原则：</strong><br>
+纵深防御 — 不依赖单一安全层，认证 + 授权 + 数据权限 + 网络策略 + 审计日志层层把关<br>
+最小权限 — 每个角色和微服务只授予完成职责所需的最小权限<br>
+默认拒绝 — 未显式允许的访问一律拒绝（NetworkPolicy + SecurityContext + API 鉴权）<br>
+不可篡改 — 审批记录和操作日志只追加不修改，确保可追溯
+</div>
+
+</body>
+</html>

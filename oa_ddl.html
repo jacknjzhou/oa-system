@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OA 系统 · 详细表结构 DDL</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface: #F7F7F8;
+  --surface-muted: #EFEFF2;
+  --surface-code: #1E1E2E;
+  --text: #171717;
+  --text-muted: #52525B;
+  --text-on-code: #CDD6F4;
+  --border: rgba(23, 23, 23, 0.12);
+  --brand: #4B3FE3;
+  --brand-soft: #F2F7FF;
+  --brand-soft-strong: #E5EAFF;
+  --brand-text: #1A1759;
+  --accent: #27D2BF;
+  --accent-soft: #EAFBF8;
+  --accent-text: #0F766E;
+  --success: #1DC981;
+  --warning: #EFAA17;
+  --danger: #E8463A;
+  --keyword: #CBA6F7;
+  --string: #A6E3A1;
+  --comment: #6C7086;
+  --number: #FAB387;
+  --radius: 8px;
+  --radius-card: 12px;
+  --spacer-4: 4px;
+  --spacer-8: 8px;
+  --spacer-12: 12px;
+  --spacer-16: 16px;
+  --spacer-20: 20px;
+  --spacer-24: 24px;
+  --spacer-32: 32px;
+  --font-sans: "SF Pro Text", "PingFang SC", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-strong: 600;
+  --text-caption: 12px/18px;
+  --text-body: 14px/20px;
+  --text-title: 16px/24px;
+  --text-code: 13px/20px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --surface: #171717;
+    --surface-muted: #262626;
+    --text: #E5E5E5;
+    --text-muted: #A1A1AA;
+    --border: rgba(229, 229, 229, 0.12);
+    --brand: #6054F1;
+    --brand-soft: #1A1759;
+    --brand-soft-strong: #3C2ECA;
+    --brand-text: #CFD8FF;
+    --accent-soft: #123F3C;
+    --accent-text: #CCFBF1;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--surface);
+  color: var(--text);
+  font: var(--weight-regular) var(--text-body) var(--font-sans);
+  line-height: 1.6;
+  padding: var(--spacer-24);
+  max-width: 1000px;
+  margin: 0 auto;
+}
+h1 { font: var(--weight-strong) 24px/32px var(--font-sans); margin-bottom: var(--spacer-8); }
+h2 {
+  font: var(--weight-strong) 20px/28px var(--font-sans);
+  margin-top: var(--spacer-32);
+  margin-bottom: var(--spacer-12);
+  padding-bottom: var(--spacer-8);
+  border-bottom: 2px solid var(--brand);
+}
+h3 {
+  font: var(--weight-medium) var(--text-title) var(--font-sans);
+  margin-top: var(--spacer-24);
+  margin-bottom: var(--spacer-8);
+}
+p { margin-bottom: var(--spacer-12); }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--spacer-20);
+  margin-bottom: var(--spacer-16);
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--spacer-12) 0;
+  font-size: var(--text-body);
+}
+th, td {
+  text-align: left;
+  padding: var(--spacer-8) var(--spacer-12);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+th {
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+  font-size: var(--text-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+td code, p code, li code {
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+  background: var(--surface-muted);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.code-block {
+  background: var(--surface-code);
+  border-radius: var(--radius-card);
+  padding: var(--spacer-20);
+  margin: var(--spacer-12) 0;
+  overflow-x: auto;
+  font: var(--weight-regular) 13px/22px var(--font-mono);
+  color: var(--text-on-code);
+  white-space: pre;
+}
+.code-block .kw { color: var(--keyword); font-weight: var(--weight-medium); }
+.code-block .str { color: var(--string); }
+.code-block .cmt { color: var(--comment); font-style: italic; }
+.code-block .num { color: var(--number); }
+.code-block .fn { color: #89B4FA; }
+.note {
+  background: var(--brand-soft);
+  border-left: 3px solid var(--brand);
+  padding: var(--spacer-12) var(--spacer-16);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  margin: var(--spacer-12) 0;
+  color: var(--brand-text);
+  font-size: var(--text-caption);
+}
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font: var(--weight-medium) 11px/16px var(--font-sans);
+  letter-spacing: 0.03em;
+}
+.badge-pk { background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--brand); }
+.badge-fk { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent-text); }
+.badge-idx { background: color-mix(in srgb, var(--warning) 14%, transparent); color: var(--warning); }
+.badge-uniq { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
+.toc {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--spacer-20);
+  margin-bottom: var(--spacer-24);
+}
+.toc-title { font-weight: var(--weight-medium); margin-bottom: var(--spacer-8); }
+.toc a { display: block; color: var(--brand); text-decoration: none; padding: 2px 0; font-size: var(--text-body); }
+.toc a:hover { text-decoration: underline; }
+.legend {
+  display: flex;
+  gap: var(--spacer-12);
+  flex-wrap: wrap;
+  margin-bottom: var(--spacer-16);
+}
+.legend-item { display: flex; align-items: center; gap: var(--spacer-4); font-size: var(--text-caption); color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<h1>OA 系统 · 详细表结构 DDL</h1>
+<p>版本 1.0 · 2026-08-29 · 数据库：MySQL 8.0+ · 字符集：utf8mb4</p>
+
+<div class="toc">
+  <div class="toc-title">目录</div>
+  <a href="#sec1">1. 用户与组织域（organization, user, role, user_role）</a>
+  <a href="#sec2">2. 流程定义域（process_definition, node_definition, transition）</a>
+  <a href="#sec3">3. 流程实例域（process_instance, task, task_candidate）</a>
+  <a href="#sec4">4. 业务域（document, attachment, approval_record）</a>
+  <a href="#sec5">5. 消息通知域（notification）</a>
+  <a href="#sec6">6. 索引策略与约束汇总</a>
+</div>
+
+<div class="legend">
+  <span class="legend-item"><span class="badge badge-pk">PK</span> 主键</span>
+  <span class="legend-item"><span class="badge badge-fk">FK</span> 外键</span>
+  <span class="legend-item"><span class="badge badge-idx">IDX</span> 普通索引</span>
+  <span class="legend-item"><span class="badge badge-uniq">UNIQ</span> 唯一索引</span>
+</div>
+
+<!-- ==================== Section 1 ==================== -->
+<h2 id="sec1">1. 用户与组织域</h2>
+
+<h3>1.1 organization — 组织架构表</h3>
+<div class="code-block"><span class="cmt">-- 组织架构树，支持自引用父子关系，使用 adjacency list 模式</span>
+<span class="kw">CREATE TABLE</span> organization (
+    id              <span class="kw">BIGINT</span>       <span class="kw">NOT NULL AUTO_INCREMENT</span> <span class="kw">COMMENT</span> <span class="str">'组织ID'</span>,
+    parent_id       <span class="kw">BIGINT</span>       <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'上级组织ID，根节点为NULL'</span>,
+    org_code        <span class="kw">VARCHAR</span>(<span class="num">64</span>)  <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'组织编码，全系统唯一'</span>,
+    org_name        <span class="kw">VARCHAR</span>(<span class="num">128</span>) <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'组织名称'</span>,
+    org_type        <span class="kw">TINYINT</span>      <span class="kw">NOT NULL DEFAULT</span> <span class="num">1</span> <span class="kw">COMMENT</span> <span class="str">'类型: 1=公司 2=部门 3=小组'</span>,
+    sort_order      <span class="kw">INT</span>          <span class="kw">NOT NULL DEFAULT</span> <span class="num">0</span> <span class="kw">COMMENT</span> <span class="str">'同级排序号'</span>,
+    path            <span class="kw">VARCHAR</span>(<span class="num">512</span>) <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'物化路径: /1/5/12/'</span>,
+    status          <span class="kw">TINYINT</span>      <span class="kw">NOT NULL DEFAULT</span> <span class="num">1</span> <span class="kw">COMMENT</span> <span class="str">'状态: 0=禁用 1=启用'</span>,
+    created_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP</span>,
+    updated_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP</span>,
+    <span class="kw">PRIMARY KEY</span> (id),
+    <span class="kw">UNIQUE KEY</span> uk_org_code (org_code),
+    <span class="kw">KEY</span> idx_parent_id (parent_id),
+    <span class="kw">KEY</span> idx_path (path(<span class="num">255</span>))
+) <span class="kw">ENGINE</span>=<span class="kw">InnoDB</span> <span class="kw">DEFAULT CHARSET</span>=utf8mb4 <span class="kw">COMMENT</span>=<span class="str">'组织架构表'</span>;</div>
+
+<table>
+<tr><th>字段</th><th>类型</th><th>约束/索引</th><th>说明</th></tr>
+<tr><td><code>id</code></td><td>BIGINT</td><td><span class="badge badge-pk">PK</span> AUTO_INCREMENT</td><td>组织ID</td></tr>
+<tr><td><code>parent_id</code></td><td>BIGINT</td><td><span class="badge badge-fk">FK</span>→self · <span class="badge badge-idx">IDX</span></td><td>自引用外键，根节点 NULL</td></tr>
+<tr><td><code>org_code</code></td><td>VARCHAR(64)</td><td><span class="badge badge-uniq">UNIQ</span></td><td>业务编码，唯一</td></tr>
+<tr><td><code>path</code></td><td>VARCHAR(512)</td><td><span class="badge badge-idx">IDX</span> 前缀255</td><td>物化路径，快速查子树</td></tr>
+<tr><td><code>org_type</code></td><td>TINYINT</td><td>DEFAULT 1</td><td>1=公司 2=部门 3=小组</td></tr>
+<tr><td><code>status</code></td><td>TINYINT</td><td>DEFAULT 1</td><td>0=禁用 1=启用</td></tr>
+</table>
+
+<div class="note">设计要点：<code>path</code> 物化路径用于高效查询子树（<code>WHERE path LIKE '/1/5/%'</code>），避免递归 CTE 在深层级下的性能问题。同时保留 <code>parent_id</code> 用于直接父子查询。</div>
+
+<h3>1.2 user — 用户表</h3>
+<div class="code-block"><span class="cmt">-- 用户账号与基本信息，密码使用 bcrypt 哈希存储</span>
+<span class="kw">CREATE TABLE</span> <span class="kw">user</span> (
+    id              <span class="kw">BIGINT</span>       <span class="kw">NOT NULL AUTO_INCREMENT</span> <span class="kw">COMMENT</span> <span class="str">'用户ID'</span>,
+    org_id          <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'所属组织ID'</span>,
+    username        <span class="kw">VARCHAR</span>(<span class="num">64</span>)  <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'登录用户名'</span>,
+    password_hash   <span class="kw">VARCHAR</span>(<span class="num">255</span>) <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'bcrypt哈希'</span>,
+    real_name       <span class="kw">VARCHAR</span>(<span class="num">64</span>)  <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'真实姓名'</span>,
+    email           <span class="kw">VARCHAR</span>(<span class="num">128</span>) <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'邮箱'</span>,
+    phone           <span class="kw">VARCHAR</span>(<span class="num">32</span>)  <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'手机号'</span>,
+    avatar_url      <span class="kw">VARCHAR</span>(<span class="num">512</span>) <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'头像URL'</span>,
+    employee_no     <span class="kw">VARCHAR</span>(<span class="num">64</span>)  <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'工号'</span>,
+    position        <span class="kw">VARCHAR</span>(<span class="num">128</span>) <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'职务'</span>,
+    status          <span class="kw">TINYINT</span>      <span class="kw">NOT NULL DEFAULT</span> <span class="num">1</span> <span class="kw">COMMENT</span> <span class="str">'状态: 0=禁用 1=启用 2=锁定'</span>,
+    last_login_at   <span class="kw">DATETIME</span>     <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'最后登录时间'</span>,
+    last_login_ip   <span class="kw">VARCHAR</span>(<span class="num">45</span>)  <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'最后登录IP'</span>,
+    created_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP</span>,
+    updated_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP</span>,
+    <span class="kw">PRIMARY KEY</span> (id),
+    <span class="kw">UNIQUE KEY</span> uk_username (username),
+    <span class="kw">UNIQUE KEY</span> uk_email (email),
+    <span class="kw">UNIQUE KEY</span> uk_employee_no (employee_no),
+    <span class="kw">KEY</span> idx_org_id (org_id),
+    <span class="kw">KEY</span> idx_phone (phone),
+    <span class="kw">CONSTRAINT</span> fk_user_org <span class="kw">FOREIGN KEY</span> (org_id) <span class="kw">REFERENCES</span> organization(id) <span class="kw">ON DELETE RESTRICT</span>
+) <span class="kw">ENGINE</span>=<span class="kw">InnoDB</span> <span class="kw">DEFAULT CHARSET</span>=utf8mb4 <span class="kw">COMMENT</span>=<span class="str">'用户表'</span>;</div>
+
+<table>
+<tr><th>字段</th><th>类型</th><th>约束/索引</th><th>说明</th></tr>
+<tr><td><code>id</code></td><td>BIGINT</td><td><span class="badge badge-pk">PK</span></td><td>用户ID</td></tr>
+<tr><td><code>org_id</code></td><td>BIGINT</td><td><span class="badge badge-fk">FK</span>→organization · <span class="badge badge-idx">IDX</span></td><td>所属组织，禁止删除有用户的组织</td></tr>
+<tr><td><code>username</code></td><td>VARCHAR(64)</td><td><span class="badge badge-uniq">UNIQ</span></td><td>登录用户名</td></tr>
+<tr><td><code>email</code></td><td>VARCHAR(128)</td><td><span class="badge badge-uniq">UNIQ</span></td><td>邮箱，可空但非空时唯一</td></tr>
+<tr><td><code>employee_no</code></td><td>VARCHAR(64)</td><td><span class="badge badge-uniq">UNIQ</span></td><td>工号，可空但非空时唯一</td></tr>
+<tr><td><code>status</code></td><td>TINYINT</td><td>DEFAULT 1</td><td>0=禁用 1=启用 2=锁定（连续登录失败）</td></tr>
+</table>
+
+<h3>1.3 role — 角色表</h3>
+<div class="code-block"><span class="cmt">-- RBAC 角色定义，角色与权限多对多</span>
+<span class="kw">CREATE TABLE</span> role (
+    id              <span class="kw">BIGINT</span>       <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+    role_code       <span class="kw">VARCHAR</span>(<span class="num">64</span>)  <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'角色编码: ADMIN, MANAGER, APPROVER...'</span>,
+    role_name        <span class="kw">VARCHAR</span>(<span class="num">128</span>) <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'角色名称'</span>,
+    description     <span class="kw">VARCHAR</span>(<span class="num">256</span>) <span class="kw">DEFAULT NULL</span>,
+    is_system       <span class="kw">TINYINT</span>      <span class="kw">NOT NULL DEFAULT</span> <span class="num">0</span> <span class="kw">COMMENT</span> <span class="str">'是否系统内置角色(不可删)'</span>,
+    sort_order      <span class="kw">INT</span>          <span class="kw">NOT NULL DEFAULT</span> <span class="num">0</span>,
+    status          <span class="kw">TINYINT</span>      <span class="kw">NOT NULL DEFAULT</span> <span class="num">1</span>,
+    created_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP</span>,
+    updated_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP</span>,
+    <span class="kw">PRIMARY KEY</span> (id),
+    <span class="kw">UNIQUE KEY</span> uk_role_code (role_code)
+) <span class="kw">ENGINE</span>=<span class="kw">InnoDB</span> <span class="kw">DEFAULT CHARSET</span>=utf8mb4 <span class="kw">COMMENT</span>=<span class="str">'角色表'</span>;</div>
+
+<h3>1.4 user_role — 用户角色关联表</h3>
+<div class="code-block"><span class="cmt">-- 用户与角色多对多关联，中间表</span>
+<span class="kw">CREATE TABLE</span> user_role (
+    id              <span class="kw">BIGINT</span>       <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+    user_id         <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span>,
+    role_id         <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span>,
+    granted_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP</span>,
+    <span class="kw">PRIMARY KEY</span> (id),
+    <span class="kw">UNIQUE KEY</span> uk_user_role (user_id, role_id),
+    <span class="kw">KEY</span> idx_role_id (role_id),
+    <span class="kw">CONSTRAINT</span> fk_ur_user <span class="kw">FOREIGN KEY</span> (user_id) <span class="kw">REFERENCES</span> <span class="kw">user</span>(id) <span class="kw">ON DELETE CASCADE</span>,
+    <span class="kw">CONSTRAINT</span> fk_ur_role <span class="kw">FOREIGN KEY</span> (role_id) <span class="kw">REFERENCES</span> role(id) <span class="kw">ON DELETE CASCADE</span>
+) <span class="kw">ENGINE</span>=<span class="kw">InnoDB</span> <span class="kw">DEFAULT CHARSET</span>=utf8mb4 <span class="kw">COMMENT</span>=<span class="str">'用户角色关联表'</span>;</div>
+
+<div class="note">外键策略：用户/角色删除时级联删除关联记录。<code>uk_user_role</code> 联合唯一索引防止重复授权。</div>
+
+<!-- ==================== Section 2 ==================== -->
+<h2 id="sec2">2. 流程定义域</h2>
+
+<h3>2.1 process_definition — 流程定义表</h3>
+<div class="code-block"><span class="cmt">-- 流程模板蓝图，支持版本管理，JSON 存储节点与连线拓扑</span>
+<span class="kw">CREATE TABLE</span> process_definition (
+    id              <span class="kw">BIGINT</span>       <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+    def_key         <span class="kw">VARCHAR</span>(<span class="num">64</span>)  <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'流程唯一标识(同一key多版本)'</span>,
+    name            <span class="kw">VARCHAR</span>(<span class="num">128</span>) <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'流程名称'</span>,
+    version         <span class="kw">INT</span>          <span class="kw">NOT NULL DEFAULT</span> <span class="num">1</span> <span class="kw">COMMENT</span> <span class="str">'版本号，每次发布+1'</span>,
+    category        <span class="kw">VARCHAR</span>(<span class="num">64</span>)  <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'分类: 报销/请假/公文...'</span>,
+    form_config     <span class="kw">JSON</span>         <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'表单字段定义JSON'</span>,
+    node_json       <span class="kw">JSON</span>         <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'节点拓扑JSON'</span>,
+    status          <span class="kw">TINYINT</span>      <span class="kw">NOT NULL DEFAULT</span> <span class="num">0</span> <span class="kw">COMMENT</span> <span class="str">'0=草稿 1=已发布 2=已停用'</span>,
+    creator_id      <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span>,
+    published_at    <span class="kw">DATETIME</span>     <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'发布时间'</span>,
+    created_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP</span>,
+    updated_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP</span>,
+    <span class="kw">PRIMARY KEY</span> (id),
+    <span class="kw">UNIQUE KEY</span> uk_def_key_version (def_key, version),
+    <span class="kw">KEY</span> idx_category (category),
+    <span class="kw">KEY</span> idx_status (status),
+    <span class="kw">CONSTRAINT</span> fk_pd_creator <span class="kw">FOREIGN KEY</span> (creator_id) <span class="kw">REFERENCES</span> <span class="kw">user</span>(id) <span class="kw">ON DELETE RESTRICT</span>
+) <span class="kw">ENGINE</span>=<span class="kw">InnoDB</span> <span class="kw">DEFAULT CHARSET</span>=utf8mb4 <span class="kw">COMMENT</span>=<span class="str">'流程定义表'</span>;</div>
+
+<div class="note"><strong>node_json 结构示例：</strong><code>[{"id":"n1","type":"START","name":"开始","next":"n2"},{"id":"n2","type":"APPROVAL","name":"经理审批","assigneeType":"ROLE","assigneeValue":"MANAGER","mode":"SINGLE","next":"n3"},{"id":"n3","type":"END","name":"结束"}]</code></div>
+
+<h3>2.2 node_definition — 节点定义表</h3>
+<div class="code-block"><span class="cmt">-- 从 node_json 中抽出的结构化节点定义，便于查询和统计</span>
+<span class="kw">CREATE TABLE</span> node_definition (
+    id              <span class="kw">BIGINT</span>       <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+    def_id          <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'所属流程定义ID'</span>,
+    node_key        <span class="kw">VARCHAR</span>(<span class="num">64</span>)  <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'节点标识(n1,n2...)'</span>,
+    node_name       <span class="kw">VARCHAR</span>(<span class="num">128</span>) <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'节点名称'</span>,
+    node_type       <span class="kw">VARCHAR</span>(<span class="num">32</span>)  <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'START|APPROVAL|CONDITION|PARALLEL|END'</span>,
+    approval_mode   <span class="kw">VARCHAR</span>(<span class="num">32</span>)  <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'SINGLE|COUNTERSIGN|OR_SIGN'</span>,
+    assignee_type   <span class="kw">VARCHAR</span>(<span class="num">32</span>)  <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'USER|ROLE|DEPT_LEADER|INITIATOR_LEADER|EXPR'</span>,
+    assignee_value  <span class="kw">VARCHAR</span>(<span class="num">512</span>) <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'审批人标识: userId/roleCode/表达式'</span>,
+    condition_expr  <span class="kw">VARCHAR</span>(<span class="num">512</span>) <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'条件表达式(条件节点)'</span>,
+    sort_order      <span class="kw">INT</span>          <span class="kw">NOT NULL DEFAULT</span> <span class="num">0</span>,
+    <span class="kw">PRIMARY KEY</span> (id),
+    <span class="kw">UNIQUE KEY</span> uk_def_node (def_id, node_key),
+    <span class="kw">KEY</span> idx_node_type (node_type),
+    <span class="kw">CONSTRAINT</span> fk_nd_def <span class="kw">FOREIGN KEY</span> (def_id) <span class="kw">REFERENCES</span> process_definition(id) <span class="kw">ON DELETE CASCADE</span>
+) <span class="kw">ENGINE</span>=<span class="kw">InnoDB</span> <span class="kw">DEFAULT CHARSET</span>=utf8mb4 <span class="kw">COMMENT</span>=<span class="str">'节点定义表'</span>;</div>
+
+<!-- ==================== Section 3 ==================== -->
+<h2 id="sec3">3. 流程实例域</h2>
+
+<h3>3.1 process_instance — 流程实例表</h3>
+<div class="code-block"><span class="cmt">-- 一次具体的审批申请，核心枢纽表</span>
+<span class="kw">CREATE TABLE</span> process_instance (
+    id              <span class="kw">BIGINT</span>       <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+    instance_no     <span class="kw">VARCHAR</span>(<span class="num">64</span>)  <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'流水号: OA20260829001'</span>,
+    def_id          <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'流程定义ID'</span>,
+    def_version     <span class="kw">INT</span>          <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'快照: 发起时的定义版本'</span>,
+    title           <span class="kw">VARCHAR</span>(<span class="num">256</span>) <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'申请标题'</span>,
+    initiator_id    <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'发起人ID'</span>,
+    business_type   <span class="kw">VARCHAR</span>(<span class="num">32</span>)  <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'业务类型: REIMBURSEMENT/LEAVE/DOCUMENT...'</span>,
+    business_id     <span class="kw">BIGINT</span>       <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'关联业务表ID(document.id等)'</span>,
+    business_data   <span class="kw">JSON</span>         <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'表单数据快照'</span>,
+    current_node    <span class="kw">VARCHAR</span>(<span class="num">64</span>)  <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'当前节点key'</span>,
+    status          <span class="kw">TINYINT</span>      <span class="kw">NOT NULL DEFAULT</span> <span class="num">0</span> <span class="kw">COMMENT</span> <span class="str">'0=草稿 1=进行中 2=已完成 3=已撤销'</span>,
+    priority        <span class="kw">TINYINT</span>      <span class="kw">NOT NULL DEFAULT</span> <span class="num">0</span> <span class="kw">COMMENT</span> <span class="str">'优先级: 0=普通 1=紧急 2=特急'</span>,
+    submitted_at    <span class="kw">DATETIME</span>     <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'提交时间'</span>,
+    completed_at    <span class="kw">DATETIME</span>     <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'完结时间'</span>,
+    created_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP</span>,
+    updated_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP</span>,
+    <span class="kw">PRIMARY KEY</span> (id),
+    <span class="kw">UNIQUE KEY</span> uk_instance_no (instance_no),
+    <span class="kw">KEY</span> idx_def_id (def_id),
+    <span class="kw">KEY</span> idx_initiator (initiator_id),
+    <span class="kw">KEY</span> idx_status (status),
+    <span class="kw">KEY</span> idx_business (business_type, business_id),
+    <span class="kw">KEY</span> idx_created (created_at),
+    <span class="kw">CONSTRAINT</span> fk_pi_def <span class="kw">FOREIGN KEY</span> (def_id) <span class="kw">REFERENCES</span> process_definition(id),
+    <span class="kw">CONSTRAINT</span> fk_pi_user <span class="kw">FOREIGN KEY</span> (initiator_id) <span class="kw">REFERENCES</span> <span class="kw">user</span>(id) <span class="kw">ON DELETE RESTRICT</span>
+) <span class="kw">ENGINE</span>=<span class="kw">InnoDB</span> <span class="kw">DEFAULT CHARSET</span>=utf8mb4 <span class="kw">COMMENT</span>=<span class="str">'流程实例表'</span>;</div>
+
+<table>
+<tr><th>字段</th><th>类型</th><th>约束/索引</th><th>说明</th></tr>
+<tr><td><code>instance_no</code></td><td>VARCHAR(64)</td><td><span class="badge badge-uniq">UNIQ</span></td><td>业务流水号，便于人类识别</td></tr>
+<tr><td><code>def_id</code></td><td>BIGINT</td><td><span class="badge badge-fk">FK</span> · <span class="badge badge-idx">IDX</span></td><td>流程定义ID</td></tr>
+<tr><td><code>initiator_id</code></td><td>BIGINT</td><td><span class="badge badge-fk">FK</span> · <span class="badge badge-idx">IDX</span></td><td>发起人，禁止删除有实例的用户</td></tr>
+<tr><td><code>business_data</code></td><td>JSON</td><td>—</td><td>表单数据快照，审批时冻结</td></tr>
+<tr><td><code>status</code></td><td>TINYINT</td><td><span class="badge badge-idx">IDX</span></td><td>0=草稿 1=进行中 2=已完成 3=已撤销</td></tr>
+<tr><td><code>business_type + business_id</code></td><td>组合</td><td><span class="badge badge-idx">IDX</span></td><td>多态关联业务表</td></tr>
+</table>
+
+<h3>3.2 task — 任务表</h3>
+<div class="code-block"><span class="cmt">-- 审批待办任务，每个审批节点生成一条</span>
+<span class="kw">CREATE TABLE</span> task (
+    id              <span class="kw">BIGINT</span>       <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+    instance_id     <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'流程实例ID'</span>,
+    node_key        <span class="kw">VARCHAR</span>(<span class="num">64</span>)  <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'节点标识'</span>,
+    node_name       <span class="kw">VARCHAR</span>(<span class="num">128</span>) <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'节点名称(快照)'</span>,
+    assignee_id     <span class="kw">BIGINT</span>       <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'实际处理人ID'</span>,
+    delegate_from   <span class="kw">BIGINT</span>       <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'转办来源人ID(转办场景)'</span>,
+    task_type       <span class="kw">VARCHAR</span>(<span class="num">32</span>)  <span class="kw">NOT NULL DEFAULT</span> <span class="str">'APPROVAL'</span> <span class="kw">COMMENT</span> <span class="str">'APPROVAL|CC|DELEGATE'</span>,
+    status          <span class="kw">TINYINT</span>      <span class="kw">NOT NULL DEFAULT</span> <span class="num">0</span> <span class="kw">COMMENT</span> <span class="str">'0=待处理 1=处理中 2=已通过 3=已驳回 4=已转办'</span>,
+    comment         <span class="kw">TEXT</span>         <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'审批意见'</span>,
+    due_at          <span class="kw">DATETIME</span>     <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'截止时间(超时提醒)'</span>,
+    claimed_at      <span class="kw">DATETIME</span>     <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'签收时间'</span>,
+    completed_at    <span class="kw">DATETIME</span>     <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'完成时间'</span>,
+    created_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP</span>,
+    updated_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP</span>,
+    <span class="kw">PRIMARY KEY</span> (id),
+    <span class="kw">KEY</span> idx_instance (instance_id),
+    <span class="kw">KEY</span> idx_assignee_status (assignee_id, status),
+    <span class="kw">KEY</span> idx_status (status),
+    <span class="kw">KEY</span> idx_due (due_at),
+    <span class="kw">CONSTRAINT</span> fk_t_instance <span class="kw">FOREIGN KEY</span> (instance_id) <span class="kw">REFERENCES</span> process_instance(id) <span class="kw">ON DELETE CASCADE</span>,
+    <span class="kw">CONSTRAINT</span> fk_t_assignee <span class="kw">FOREIGN KEY</span> (assignee_id) <span class="kw">REFERENCES</span> <span class="kw">user</span>(id) <span class="kw">ON DELETE SET NULL</span>
+) <span class="kw">ENGINE</span>=<span class="kw">InnoDB</span> <span class="kw">DEFAULT CHARSET</span>=utf8mb4 <span class="kw">COMMENT</span>=<span class="str">'任务表'</span>;</div>
+
+<div class="note">关键索引：<code>idx_assignee_status (assignee_id, status)</code> 覆盖「我的待办」最高频查询：<code>WHERE assignee_id=? AND status=0</code>。<code>idx_due</code> 支撑超时巡检定时任务。</div>
+
+<h3>3.3 task_candidate — 任务候选人表</h3>
+<div class="code-block"><span class="cmt">-- 会签/或签场景下，一个节点对应多个候选人</span>
+<span class="kw">CREATE TABLE</span> task_candidate (
+    id              <span class="kw">BIGINT</span>       <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+    task_id         <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span>,
+    user_id         <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span>,
+    <span class="kw">PRIMARY KEY</span> (id),
+    <span class="kw">UNIQUE KEY</span> uk_task_user (task_id, user_id),
+    <span class="kw">KEY</span> idx_user (user_id),
+    <span class="kw">CONSTRAINT</span> fk_tc_task <span class="kw">FOREIGN KEY</span> (task_id) <span class="kw">REFERENCES</span> task(id) <span class="kw">ON DELETE CASCADE</span>,
+    <span class="kw">CONSTRAINT</span> fk_tc_user <span class="kw">FOREIGN KEY</span> (user_id) <span class="kw">REFERENCES</span> <span class="kw">user</span>(id) <span class="kw">ON DELETE CASCADE</span>
+) <span class="kw">ENGINE</span>=<span class="kw">InnoDB</span> <span class="kw">DEFAULT CHARSET</span>=utf8mb4 <span class="kw">COMMENT</span>=<span class="str">'任务候选人表'</span>;</div>
+
+<!-- ==================== Section 4 ==================== -->
+<h2 id="sec4">4. 业务域</h2>
+
+<h3>4.1 document — 公文表</h3>
+<div class="code-block"><span class="cmt">-- 公文正文与元数据，关联流程实例</span>
+<span class="kw">CREATE TABLE</span> document (
+    id              <span class="kw">BIGINT</span>       <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+    doc_no          <span class="kw">VARCHAR</span>(<span class="num">64</span>)  <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'公文文号'</span>,
+    title           <span class="kw">VARCHAR</span>(<span class="num">256</span>) <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'公文标题'</span>,
+    content         <span class="kw">LONGTEXT</span>     <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'正文内容(HTML)'</span>,
+    doc_type        <span class="kw">VARCHAR</span>(<span class="num">32</span>)  <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'类型: NOTICE/REPORT/INSTRUCTION/DECISION'</span>,
+    urgency         <span class="kw">TINYINT</span>      <span class="kw">NOT NULL DEFAULT</span> <span class="num">0</span> <span class="kw">COMMENT</span> <span class="str">'紧急度: 0=普通 1=急 2=特急'</span>,
+    secrecy_level   <span class="kw">TINYINT</span>      <span class="kw">NOT NULL DEFAULT</span> <span class="num">0</span> <span class="kw">COMMENT</span> <span class="str">'密级: 0=公开 1=内部 2=机密'</span>,
+    author_id       <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'拟稿人ID'</span>,
+    instance_id     <span class="kw">BIGINT</span>       <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'关联流程实例ID'</span>,
+    status          <span class="kw">TINYINT</span>      <span class="kw">NOT NULL DEFAULT</span> <span class="num">0</span> <span class="kw">COMMENT</span> <span class="str">'0=草稿 1=审批中 2=已发布 3=已归档'</span>,
+    published_at    <span class="kw">DATETIME</span>     <span class="kw">DEFAULT NULL</span>,
+    archived_at     <span class="kw">DATETIME</span>     <span class="kw">DEFAULT NULL</span>,
+    created_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP</span>,
+    updated_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP</span>,
+    <span class="kw">PRIMARY KEY</span> (id),
+    <span class="kw">UNIQUE KEY</span> uk_doc_no (doc_no),
+    <span class="kw">KEY</span> idx_author (author_id),
+    <span class="kw">KEY</span> idx_instance (instance_id),
+    <span class="kw">KEY</span> idx_status (status),
+    <span class="kw">KEY</span> idx_type_urgency (doc_type, urgency),
+    <span class="kw">FULLTEXT KEY</span> ft_title_content (title, content),
+    <span class="kw">CONSTRAINT</span> fk_doc_author <span class="kw">FOREIGN KEY</span> (author_id) <span class="kw">REFERENCES</span> <span class="kw">user</span>(id) <span class="kw">ON DELETE RESTRICT</span>,
+    <span class="kw">CONSTRAINT</span> fk_doc_instance <span class="kw">FOREIGN KEY</span> (instance_id) <span class="kw">REFERENCES</span> process_instance(id) <span class="kw">ON DELETE SET NULL</span>
+) <span class="kw">ENGINE</span>=<span class="kw">InnoDB</span> <span class="kw">DEFAULT CHARSET</span>=utf8mb4 <span class="kw">COMMENT</span>=<span class="str">'公文表'</span>;</div>
+
+<div class="note"><code>FULLTEXT</code> 全文索引支持公文标题和正文的中文全文检索。InnoDB 全文索引需 <code>ngram</code> 分词器，配置 <code>innodb_ft_min_token_size=2</code>。</div>
+
+<h3>4.2 attachment — 附件表</h3>
+<div class="code-block"><span class="cmt">-- 公文/流程实例的附件，文件存储在对象存储(OSS/MinIO)</span>
+<span class="kw">CREATE TABLE</span> attachment (
+    id              <span class="kw">BIGINT</span>       <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+    target_type     <span class="kw">VARCHAR</span>(<span class="num">32</span>)  <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'关联类型: DOCUMENT|INSTANCE|TASK'</span>,
+    target_id       <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'关联目标ID'</span>,
+    file_name       <span class="kw">VARCHAR</span>(<span class="num">256</span>) <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'原始文件名'</span>,
+    file_size       <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'文件大小(字节)'</span>,
+    file_type       <span class="kw">VARCHAR</span>(<span class="num">64</span>)  <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'MIME类型'</span>,
+    storage_key     <span class="kw">VARCHAR</span>(<span class="num">512</span>) <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'对象存储key'</span>,
+    storage_url     <span class="kw">VARCHAR</span>(<span class="num">1024</span>) <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'访问URL(可预签名)'</span>,
+    uploader_id     <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span>,
+    created_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP</span>,
+    <span class="kw">PRIMARY KEY</span> (id),
+    <span class="kw">KEY</span> idx_target (target_type, target_id),
+    <span class="kw">CONSTRAINT</span> fk_att_uploader <span class="kw">FOREIGN KEY</span> (uploader_id) <span class="kw">REFERENCES</span> <span class="kw">user</span>(id) <span class="kw">ON DELETE RESTRICT</span>
+) <span class="kw">ENGINE</span>=<span class="kw">InnoDB</span> <span class="kw">DEFAULT CHARSET</span>=utf8mb4 <span class="kw">COMMENT</span>=<span class="str">'附件表'</span>;</div>
+
+<h3>4.3 approval_record — 审批记录表</h3>
+<div class="code-block"><span class="cmt">-- 审批操作留痕，独立于task表，确保历史不被重分配丢失</span>
+<span class="kw">CREATE TABLE</span> approval_record (
+    id              <span class="kw">BIGINT</span>       <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+    instance_id     <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'流程实例ID'</span>,
+    task_id         <span class="kw">BIGINT</span>       <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'关联任务ID(可空:发起操作无任务)'</span>,
+    node_key        <span class="kw">VARCHAR</span>(<span class="num">64</span>)  <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'节点标识'</span>,
+    action          <span class="kw">VARCHAR</span>(<span class="num">32</span>)  <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'SUBMIT|APPROVE|REJECT|TRANSFER|CANCEL|COUNTERSIGN'</span>,
+    operator_id     <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'操作人ID'</span>,
+    operator_name   <span class="kw">VARCHAR</span>(<span class="num">64</span>)  <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'操作人姓名快照'</span>,
+    operator_dept   <span class="kw">VARCHAR</span>(<span class="num">128</span>) <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'操作时部门快照'</span>,
+    comment         <span class="kw">TEXT</span>         <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'审批意见'</span>,
+    from_node       <span class="kw">VARCHAR</span>(<span class="num">64</span>)  <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'驳回来源节点(驳回时)'</span>,
+    to_node         <span class="kw">VARCHAR</span>(<span class="num">64</span>)  <span class="kw">DEFAULT NULL</span> <span class="str">'目标节点(驳回/转办时)'</span>,
+    created_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP</span>,
+    <span class="kw">PRIMARY KEY</span> (id),
+    <span class="kw">KEY</span> idx_instance (instance_id),
+    <span class="kw">KEY</span> idx_task (task_id),
+    <span class="kw">KEY</span> idx_operator (operator_id),
+    <span class="kw">CONSTRAINT</span> fk_ar_instance <span class="kw">FOREIGN KEY</span> (instance_id) <span class="kw">REFERENCES</span> process_instance(id) <span class="kw">ON DELETE CASCADE</span>,
+    <span class="kw">CONSTRAINT</span> fk_ar_task <span class="kw">FOREIGN KEY</span> (task_id) <span class="kw">REFERENCES</span> task(id) <span class="kw">ON DELETE SET NULL</span>,
+    <span class="kw">CONSTRAINT</span> fk_ar_operator <span class="kw">FOREIGN KEY</span> (operator_id) <span class="kw">REFERENCES</span> <span class="kw">user</span>(id) <span class="kw">ON DELETE RESTRICT</span>
+) <span class="kw">ENGINE</span>=<span class="kw">InnoDB</span> <span class="kw">DEFAULT CHARSET</span>=utf8mb4 <span class="kw">COMMENT</span>=<span class="str">'审批记录表'</span>;</div>
+
+<div class="note">设计要点：<code>operator_name</code> 和 <code>operator_dept</code> 做了快照冗余——即使用户后续改名或调岗，审批历史仍保留操作时的信息。<code>task_id</code> 使用 <code>ON DELETE SET NULL</code> 而非 CASCADE，确保任务删除不丢失审批记录。</div>
+
+<!-- ==================== Section 5 ==================== -->
+<h2 id="sec5">5. 消息通知域</h2>
+
+<h3>5.1 notification — 消息通知表</h3>
+<div class="code-block"><span class="cmt">-- 站内消息通知，支持多种渠道推送</span>
+<span class="kw">CREATE TABLE</span> notification (
+    id              <span class="kw">BIGINT</span>       <span class="kw">NOT NULL AUTO_INCREMENT</span>,
+    user_id         <span class="kw">BIGINT</span>       <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'接收人ID'</span>,
+    title           <span class="kw">VARCHAR</span>(<span class="num">256</span>) <span class="kw">NOT NULL</span>,
+    content         <span class="kw">TEXT</span>         <span class="kw">NOT NULL</span>,
+    notify_type     <span class="kw">VARCHAR</span>(<span class="num">32</span>)  <span class="kw">NOT NULL</span> <span class="kw">COMMENT</span> <span class="str">'TASK|APPROVAL|SYSTEM|REMINDER'</span>,
+    ref_type        <span class="kw">VARCHAR</span>(<span class="num">32</span>)  <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'关联类型'</span>,
+    ref_id          <span class="kw">BIGINT</span>       <span class="kw">DEFAULT NULL</span> <span class="kw">COMMENT</span> <span class="str">'关联ID'</span>,
+    is_read         <span class="kw">TINYINT</span>      <span class="kw">NOT NULL DEFAULT</span> <span class="num">0</span> <span class="kw">COMMENT</span> <span class="str">'0=未读 1=已读'</span>,
+    read_at         <span class="kw">DATETIME</span>     <span class="kw">DEFAULT NULL</span>,
+    created_at      <span class="kw">DATETIME</span>     <span class="kw">NOT NULL DEFAULT CURRENT_TIMESTAMP</span>,
+    <span class="kw">PRIMARY KEY</span> (id),
+    <span class="kw">KEY</span> idx_user_read (user_id, is_read),
+    <span class="kw">KEY</span> idx_user_created (user_id, created_at),
+    <span class="kw">KEY</span> idx_type (notify_type),
+    <span class="kw">CONSTRAINT</span> fk_notif_user <span class="kw">FOREIGN KEY</span> (user_id) <span class="kw">REFERENCES</span> <span class="kw">user</span>(id) <span class="kw">ON DELETE CASCADE</span>
+) <span class="kw">ENGINE</span>=<span class="kw">InnoDB</span> <span class="kw">DEFAULT CHARSET</span>=utf8mb4 <span class="kw">COMMENT</span>=<span class="str">'消息通知表'</span>;</div>
+
+<div class="note"><code>idx_user_read (user_id, is_read)</code> 覆盖「未读消息数」查询：<code>SELECT COUNT(*) FROM notification WHERE user_id=? AND is_read=0</code>。</div>
+
+<!-- ==================== Section 6 ==================== -->
+<h2 id="sec6">6. 索引策略与约束汇总</h2>
+
+<h3>索引策略一览</h3>
+<table>
+<tr><th>表</th><th>索引名</th><th>字段</th><th>类型</th><th>覆盖场景</th></tr>
+<tr><td>organization</td><td>idx_parent_id</td><td>parent_id</td><td><span class="badge badge-idx">IDX</span></td><td>查直接子组织</td></tr>
+<tr><td>organization</td><td>idx_path</td><td>path(255)</td><td><span class="badge badge-idx">IDX</span></td><td>物化路径查子树</td></tr>
+<tr><td>user</td><td>uk_username</td><td>username</td><td><span class="badge badge-uniq">UNIQ</span></td><td>登录查询</td></tr>
+<tr><td>user</td><td>idx_org_id</td><td>org_id</td><td><span class="badge badge-idx">IDX</span></td><td>按组织查用户</td></tr>
+<tr><td>process_definition</td><td>uk_def_key_version</td><td>def_key, version</td><td><span class="badge badge-uniq">UNIQ</span></td><td>按key+version定位定义</td></tr>
+<tr><td>process_instance</td><td>idx_initiator</td><td>initiator_id</td><td><span class="badge badge-idx">IDX</span></td><td>我发起的流程</td></tr>
+<tr><td>process_instance</td><td>idx_status</td><td>status</td><td><span class="badge badge-idx">IDX</span></td><td>按状态筛选</td></tr>
+<tr><td>process_instance</td><td>idx_business</td><td>business_type, business_id</td><td><span class="badge badge-idx">IDX</span></td><td>业务关联反查</td></tr>
+<tr><td>task</td><td>idx_assignee_status</td><td>assignee_id, status</td><td><span class="badge badge-idx">IDX</span></td><td>我的待办（最高频）</td></tr>
+<tr><td>task</td><td>idx_due</td><td>due_at</td><td><span class="badge badge-idx">IDX</span></td><td>超时巡检</td></tr>
+<tr><td>approval_record</td><td>idx_instance</td><td>instance_id</td><td><span class="badge badge-idx">IDX</span></td><td>审批轨迹查询</td></tr>
+<tr><td>notification</td><td>idx_user_read</td><td>user_id, is_read</td><td><span class="badge badge-idx">IDX</span></td><td>未读消息数</td></tr>
+<tr><td>document</td><td>ft_title_content</td><td>title, content</td><td>FULLTEXT</td><td>全文检索</td></tr>
+</table>
+
+<h3>外键约束策略</h3>
+<table>
+<tr><th>外键</th><th>onDelete 策略</th><th>理由</th></tr>
+<tr><td>user.org_id → organization</td><td>RESTRICT</td><td>禁止删除有用户的组织</td></tr>
+<tr><td>user_role.user_id → user</td><td>CASCADE</td><td>用户删除时级联清理角色关联</td></tr>
+<tr><td>user_role.role_id → role</td><td>CASCADE</td><td>角色删除时级联清理用户关联</td></tr>
+<tr><td>process_instance.def_id → process_definition</td><td>RESTRICT</td><td>有实例时禁止删除定义</td></tr>
+<tr><td>process_instance.initiator_id → user</td><td>RESTRICT</td><td>禁止删除有流程记录的用户</td></tr>
+<tr><td>task.instance_id → process_instance</td><td>CASCADE</td><td>实例删除时级联清理任务</td></tr>
+<tr><td>task.assignee_id → user</td><td>SET NULL</td><td>用户删除时任务保留，处理人置空</td></tr>
+<tr><td>approval_record.task_id → task</td><td>SET NULL</td><td>任务删除时审批记录保留</td></tr>
+<tr><td>approval_record.instance_id → process_instance</td><td>CASCADE</td><td>实例删除时级联清理记录</td></tr>
+</table>
+
+<h3>枚举值速查</h3>
+<table>
+<tr><th>表.字段</th><th>枚举值</th></tr>
+<tr><td>organization.org_type</td><td>1=公司 · 2=部门 · 3=小组</td></tr>
+<tr><td>user.status</td><td>0=禁用 · 1=启用 · 2=锁定</td></tr>
+<tr><td>process_definition.status</td><td>0=草稿 · 1=已发布 · 2=已停用</td></tr>
+<tr><td>node_definition.node_type</td><td>START · APPROVAL · CONDITION · PARALLEL · END</td></tr>
+<tr><td>node_definition.approval_mode</td><td>SINGLE · COUNTERSIGN · OR_SIGN</td></tr>
+<tr><td>node_definition.assignee_type</td><td>USER · ROLE · DEPT_LEADER · INITIATOR_LEADER · EXPR</td></tr>
+<tr><td>process_instance.status</td><td>0=草稿 · 1=进行中 · 2=已完成 · 3=已撤销</td></tr>
+<tr><td>task.status</td><td>0=待处理 · 1=处理中 · 2=已通过 · 3=已驳回 · 4=已转办</td></tr>
+<tr><td>task.task_type</td><td>APPROVAL · CC · DELEGATE</td></tr>
+<tr><td>approval_record.action</td><td>SUBMIT · APPROVE · REJECT · TRANSFER · CANCEL · COUNTERSIGN</td></tr>
+<tr><td>document.status</td><td>0=草稿 · 1=审批中 · 2=已发布 · 3=已归档</td></tr>
+<tr><td>document.doc_type</td><td>NOTICE · REPORT · INSTRUCTION · DECISION</td></tr>
+<tr><td>notification.notify_type</td><td>TASK · APPROVAL · SYSTEM · REMINDER</td></tr>
+</table>
+
+<div class="note">
+<strong>表总量汇总（12张表）：</strong><br>
+用户与组织域：organization, user, role, user_role（4张）<br>
+流程定义域：process_definition, node_definition（2张）<br>
+流程实例域：process_instance, task, task_candidate（3张）<br>
+业务域：document, attachment, approval_record（3张）<br>
+消息通知域：notification（1张，可按需扩展 log/audit 等表）
+</div>
+
+</body>
+</html>
