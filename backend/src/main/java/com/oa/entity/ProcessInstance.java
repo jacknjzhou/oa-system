@@ -32,6 +32,10 @@ public class ProcessInstance extends BaseEntity {
     @Column(name = "instance_no", nullable = false, unique = true, length = 64)
     private String instanceNo;
 
+    /** 关联 Flowable 流程实例 ID */
+    @Column(name = "flowable_instance_id", length = 64, unique = true)
+    private String flowableInstanceId;
+
     @JsonIgnore
     @ManyToOne
     @JoinColumn(name = "def_id")
@@ -56,7 +60,7 @@ public class ProcessInstance extends BaseEntity {
     private String businessId;
 
     @Lob
-    @Column(name = "business_data")
+    @Column(name = "business_data", columnDefinition = "TEXT")
     private String businessData;
 
     @Column(name = "current_node", length = 64)

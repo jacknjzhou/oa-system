@@ -1,0 +1,185 @@
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useTheme } from './Theme'
+import { getStoredUser, logout } from '../api/auth'
+
+interface NavItem {
+  to: string
+  label: string
+  icon: string
+}
+
+const NAV_ITEMS: NavItem[] = [
+  {
+    to: '/start',
+    label: '发起审批',
+    icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z',
+  },
+  {
+    to: '/tasks/todo',
+    label: '待审批',
+    icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
+  },
+  {
+    to: '/tasks/done',
+    label: '已审批',
+    icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+  },
+  {
+    to: '/my-instances',
+    label: '我的申请',
+    icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z',
+  },
+  {
+    to: '/templates',
+    label: '审批模板',
+    icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h3a1 1 0 011 1v6a1 1 0 01-1 1h-3a1 1 0 01-1-1v-6z',
+  },
+]
+
+function pageTitle(pathname: string): string {
+  if (pathname.startsWith('/tasks/todo')) return '待审批'
+  if (pathname.startsWith('/tasks/done')) return '已审批'
+  if (pathname.startsWith('/task/')) return '审批处理'
+  if (pathname.startsWith('/tracking/')) return '流程跟踪'
+  if (pathname.startsWith('/templates/new')) return '新建模板'
+  if (pathname.startsWith('/templates/')) return '编辑模板'
+  if (pathname.startsWith('/templates')) return '审批模板'
+  if (pathname.startsWith('/my-instances')) return '我的申请'
+  return '发起审批'
+}
+
+export default function AppShell() {
+  const { theme, toggleTheme } = useTheme()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const user = getStoredUser()
+  const title = pageTitle(location.pathname)
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login', { replace: true })
+  }
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-slate-100 dark:bg-slate-900">
+      {/* 左侧 Sidebar */}
+      <aside className="flex w-60 shrink-0 flex-col bg-slate-900 text-slate-200">
+        <div className="flex h-16 items-center gap-3 px-5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-violet-500 text-lg font-bold text-white shadow-lg">
+            OA
+          </div>
+          <div>
+            <p className="text-base font-semibold leading-tight text-white">OA 审批系统</p>
+            <p className="text-xs text-slate-400">Flowable 流程引擎</p>
+          </div>
+        </div>
+
+        <nav className="mt-4 flex-1 space-y-1 overflow-y-auto px-3">
+          {NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-primary-600 text-white shadow-md'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`
+              }
+            >
+              <svg
+                className="h-5 w-5 shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.8}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
+              </svg>
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+
+        {/* 底部用户卡片 */}
+        <div className="border-t border-slate-800 p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-500/20 text-sm font-semibold text-primary-300 ring-1 ring-primary-500/40">
+              {(user?.realName || user?.username || '?').slice(0, 1)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-white">
+                {user?.realName || user?.username || '未知用户'}
+              </p>
+              <p className="truncate text-xs text-slate-400">
+                {user?.roles?.length ? user.roles.join(' / ') : user?.position || '普通用户'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="退出登录"
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-red-400"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* 右侧内容区 */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* 顶栏 */}
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 dark:border-slate-700 dark:bg-slate-800">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-slate-400 dark:text-slate-500">OA 审批</span>
+            <span className="text-slate-300 dark:text-slate-600">/</span>
+            <h1 className="font-semibold text-slate-900 dark:text-slate-100">{title}</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              title={theme === 'light' ? '切换到深色模式' : '切换到浅色模式'}
+              className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+            >
+              {theme === 'light' ? (
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+                  />
+                </svg>
+              ) : (
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+                  />
+                </svg>
+              )}
+            </button>
+            <div className="hidden items-center gap-2 sm:flex">
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                {user?.realName || user?.username || ''}
+              </span>
+            </div>
+          </div>
+        </header>
+
+        {/* 路由出口 */}
+        <main className="flex-1 overflow-y-auto">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  )
+}

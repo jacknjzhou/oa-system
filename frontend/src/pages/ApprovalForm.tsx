@@ -1,414 +1,405 @@
-import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { getTaskDetail, completeTask, rejectTask, transferTask } from '../api/task'
-import type { TaskDetail } from '../types'
+import { useCallback, useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import type { FormField, TaskDetail, UserSummary } from '../types'
+import { getTask, completeTask, rejectTask, transferTask } from '../api/task'
+import { getTemplate } from '../api/template'
+import { getUsers } from '../api/user'
+import { getStoredUser } from '../api/auth'
+import { useToast } from '../components/Toast'
+import Modal from '../components/Modal'
+import BpmnViewer from '../components/BpmnViewer'
+import ApprovalTimeline from '../components/ApprovalTimeline'
+import InstanceInfoCard from '../components/InstanceInfoCard'
+import EmptyState, { ErrorState, LoadingState } from '../components/EmptyState'
+import { formatDateTime, parseFormConfig } from '../utils/format'
+import { parseUserTasks } from '../utils/bpmn'
+
+type ActionModal = 'approve' | 'reject' | 'transfer' | null
 
 export default function ApprovalForm() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { showToast } = useToast()
+
   const [detail, setDetail] = useState<TaskDetail | null>(null)
+  const [formFields, setFormFields] = useState<FormField[] | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+
+  const [modal, setModal] = useState<ActionModal>(null)
   const [comment, setComment] = useState('')
-  const [rejectToNode, setRejectToNode] = useState('')
-  const [transferUserId, setTransferUserId] = useState('')
-  const [actionLoading, setActionLoading] = useState(false)
-  const [showReject, setShowReject] = useState(false)
-  const [showTransfer, setShowTransfer] = useState(false)
+  const [toNodeKey, setToNodeKey] = useState('')
+  const [toUserId, setToUserId] = useState('')
+  const [users, setUsers] = useState<UserSummary[]>([])
+  const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => {
-    fetchDetail()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
+  const user = getStoredUser()
 
-  const fetchDetail = async () => {
+  const loadDetail = useCallback(async () => {
+    if (!id) return
     setLoading(true)
+    setLoadError('')
     try {
-      if (!id) return
-      const data = await getTaskDetail(id)
-      setDetail(data)
+      const taskDetail = await getTask(id)
+      setDetail(taskDetail)
+      // 拉取模板以按 formConfig 展示业务数据（失败则回退为原始键展示）
+      try {
+        const template = await getTemplate(taskDetail.instance.defId)
+        setFormFields(parseFormConfig(template.formConfig).fields)
+      } catch {
+        setFormFields(null)
+      }
     } catch (err) {
-      console.error('Failed to fetch task detail:', err)
+      setLoadError(err instanceof Error ? err.message : '任务加载失败')
     } finally {
       setLoading(false)
     }
-  }
+  }, [id])
 
-  const handleApprove = async () => {
-    if (!id) return
-    setActionLoading(true)
-    try {
-      await completeTask(id, comment || '同意')
-      navigate('/')
-    } catch (err) {
-      console.error('Failed to approve task:', err)
-    } finally {
-      setActionLoading(false)
+  useEffect(() => {
+    loadDetail()
+  }, [loadDetail])
+
+  const openModal = (action: Exclude<ActionModal, null>) => {
+    setComment('')
+    setToNodeKey('')
+    setToUserId('')
+    setModal(action)
+    if (action === 'transfer') {
+      getUsers()
+        .then(setUsers)
+        .catch((err) => {
+          showToast(err instanceof Error ? err.message : '用户列表加载失败', 'error')
+        })
     }
   }
 
-  const handleReject = async () => {
-    if (!id) return
-    setActionLoading(true)
+  const closeModal = () => {
+    if (submitting) return
+    setModal(null)
+  }
+
+  const handleSubmitApprove = async () => {
+    if (!detail) return
+    setSubmitting(true)
     try {
-      await rejectTask(id, comment, rejectToNode || 'start')
-      navigate('/')
+      await completeTask(detail.task.id, { comment })
+      showToast('审批通过成功', 'success')
+      navigate('/tasks/todo')
     } catch (err) {
-      console.error('Failed to reject task:', err)
+      showToast(err instanceof Error ? err.message : '操作失败', 'error')
     } finally {
-      setActionLoading(false)
+      setSubmitting(false)
     }
   }
 
-  const handleTransfer = async () => {
-    if (!id || !transferUserId) return
-    setActionLoading(true)
+  const handleSubmitReject = async () => {
+    if (!detail) return
+    if (!comment.trim()) {
+      showToast('请填写驳回意见', 'error')
+      return
+    }
+    setSubmitting(true)
     try {
-      await transferTask(id, transferUserId, comment || '转办')
-      navigate('/')
+      await rejectTask(detail.task.id, {
+        comment: comment.trim(),
+        toNodeKey: toNodeKey || undefined,
+      })
+      showToast(toNodeKey ? '已驳回到指定节点' : '已驳回', 'success')
+      navigate('/tasks/todo')
     } catch (err) {
-      console.error('Failed to transfer task:', err)
+      showToast(err instanceof Error ? err.message : '操作失败', 'error')
     } finally {
-      setActionLoading(false)
+      setSubmitting(false)
+    }
+  }
+
+  const handleSubmitTransfer = async () => {
+    if (!detail) return
+    if (!toUserId) {
+      showToast('请选择转办人', 'error')
+      return
+    }
+    if (!comment.trim()) {
+      showToast('请填写转办意见', 'error')
+      return
+    }
+    setSubmitting(true)
+    try {
+      await transferTask(detail.task.id, { toUserId, comment: comment.trim() })
+      showToast('转办成功', 'success')
+      navigate('/tasks/todo')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '操作失败', 'error')
+    } finally {
+      setSubmitting(false)
     }
   }
 
   if (loading) {
-    return <div className="loading">加载中...</div>
+    return <LoadingState text="正在加载任务详情…" />
   }
 
-  if (!detail) {
-    return <div className="empty">未找到任务信息</div>
-  }
-
-  const fileIcon = (type: string) => {
-    if (type.includes('pdf')) return '📄'
-    if (type.includes('image')) return '🖼️'
-    if (type.includes('word')) return '📝'
-    return '📎'
-  }
-
-  return (
-    <div>
-      {/* 顶部导航栏 */}
-      <nav className="navbar">
-        <div className="navbar-inner">
-          <div className="navbar-logo">
-            <button className="btn" onClick={() => navigate('/')}>
-              ← 返回列表
-            </button>
-          </div>
-          <span style={{ fontSize: '16px', fontWeight: 600 }}>{detail.title}</span>
-          <span className="text-tertiary">{detail.serialNo}</span>
-        </div>
-      </nav>
-
-      <div className="page-container">
-        <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
-          {/* 左侧：表单详情 */}
-          <div style={{ flex: 1 }}>
-            {/* 基本信息 */}
-            <div className="card mb-24">
-              <div className="card-header">基本信息</div>
-              <div className="card-body">
-                <table className="table" style={{ background: 'transparent' }}>
-                  <tbody>
-                    <tr>
-                      <td style={{ width: '120px', color: '#8c8c8c', background: 'var(--bg-page)' }}>
-                        标题
-                      </td>
-                      <td colSpan={3}>{detail.title}</td>
-                    </tr>
-                    <tr>
-                      <td style={{ width: '120px', color: '#8c8c8c', background: 'var(--bg-page)' }}>
-                        流水号
-                      </td>
-                      <td>{detail.serialNo}</td>
-                      <td style={{ width: '120px', color: '#8c8c8c', background: 'var(--bg-page)' }}>
-                        任务类型
-                      </td>
-                      <td>{detail.type}</td>
-                    </tr>
-                    <tr>
-                      <td style={{ width: '120px', color: '#8c8c8c', background: 'var(--bg-page)' }}>
-                        发起人
-                      </td>
-                      <td>{detail.initiator}</td>
-                      <td style={{ width: '120px', color: '#8c8c8c', background: 'var(--bg-page)' }}>
-                        发起部门
-                      </td>
-                      <td>{detail.initiatorDept}</td>
-                    </tr>
-                    <tr>
-                      <td style={{ width: '120px', color: '#8c8c8c', background: 'var(--bg-page)' }}>
-                        金额
-                      </td>
-                      <td style={{ fontWeight: 600, color: '#f5222d' }}>
-                        {detail.amount > 0 ? `¥${detail.amount.toLocaleString()}` : '-'}
-                      </td>
-                      <td style={{ width: '120px', color: '#8c8c8c', background: 'var(--bg-page)' }}>
-                        截止时间
-                      </td>
-                      <td>{detail.deadline}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* 业务明细 */}
-            <div className="card mb-24">
-              <div className="card-header">业务明细</div>
-              <div className="card-body">
-                <table className="table">
-                  <tbody>
-                    {detail.businessDetails.map((item) => (
-                      <tr key={item.id}>
-                        <td style={{ width: '150px', color: '#8c8c8c', background: 'var(--bg-page)' }}>
-                          {item.label}
-                        </td>
-                        <td>{item.value}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* 附件列表 */}
-            <div className="card mb-24">
-              <div className="card-header">附件列表</div>
-              <div className="card-body">
-                {detail.attachments.length === 0 ? (
-                  <div className="empty" style={{ padding: '24px' }}>
-                    暂无附件
-                  </div>
-                ) : (
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>文件名</th>
-                        <th>大小</th>
-                        <th>类型</th>
-                        <th>上传时间</th>
-                        <th>操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detail.attachments.map((file) => (
-                        <tr key={file.id}>
-                          <td>
-                            {fileIcon(file.type)} {file.name}
-                          </td>
-                          <td>{(file.size / 1024).toFixed(1)} KB</td>
-                          <td>{file.type}</td>
-                          <td>{file.uploadedAt}</td>
-                          <td>
-                            <button className="btn">下载</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* 右侧：审批流程链 */}
-          <div style={{ width: '320px', flexShrink: 0 }}>
-            <div className="card">
-              <div className="card-header">审批流程</div>
-              <div className="card-body" style={{ padding: '16px' }}>
-                {detail.approvalChain.map((node, index) => (
-                  <div
-                    key={node.id}
-                    className="flex gap-12"
-                    style={{
-                      position: 'relative',
-                      paddingBottom: index === detail.approvalChain.length - 1 ? 0 : 16,
-                    }}
-                  >
-                    {/* 连接线 + 圆点 */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        flexShrink: 0,
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '50%',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '14px',
-                          fontWeight: 600,
-                          background:
-                            node.status === 'completed'
-                              ? '#52c41a'
-                              : node.status === 'current'
-                                ? '#1890ff'
-                                : '#f0f0f0',
-                          color: node.status === 'completed' || node.status === 'current' ? '#fff' : '#8c8c8c',
-                        }}
-                      >
-                        {node.status === 'completed' ? '✓' : index + 1}
-                      </div>
-                      {index < detail.approvalChain.length - 1 && (
-                        <div
-                          style={{
-                            width: '2px',
-                            flex: 1,
-                            minHeight: '24px',
-                            background:
-                              node.status === 'completed' ? '#52c41a' : '#f0f0f0',
-                            marginTop: '4px',
-                          }}
-                        />
-                      )}
-                    </div>
-
-                    {/* 节点内容 */}
-                    <div style={{ flex: 1 }}>
-                      <div className="font-bold" style={{ fontSize: '14px' }}>
-                        {node.name}
-                      </div>
-                      <div className="text-tertiary text-sm" style={{ marginTop: '2px' }}>
-                        {node.approver}
-                      </div>
-                      {node.action && (
-                        <span
-                          className={`tag tag-${node.status === 'completed' ? 'completed' : 'processing'}`}
-                          style={{ marginTop: '4px' }}
-                        >
-                          {node.action}
-                        </span>
-                      )}
-                      {node.comment && (
-                        <div
-                          className="text-sm"
-                          style={{
-                            marginTop: '4px',
-                            color: '#595959',
-                            background: '#fafafa',
-                            padding: '6px 8px',
-                            borderRadius: '4px',
-                          }}
-                        >
-                          "{node.comment}"
-                        </div>
-                      )}
-                      {node.time && (
-                        <div className="text-tertiary text-sm" style={{ marginTop: '4px' }}>
-                          {node.time}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 底部操作栏 */}
-        <div className="card mt-24">
-          <div className="card-header">审批操作</div>
-          <div className="card-body">
-            {/* 审批意见输入框 */}
-            <div className="mb-16">
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>
-                审批意见
-              </label>
-              <textarea
-                className="textarea"
-                style={{ minHeight: '80px' }}
-                placeholder="请输入审批意见..."
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-              />
-            </div>
-
-            {/* 驳回节点选择 */}
-            {showReject && (
-              <div className="mb-16" style={{ background: 'var(--danger-light)', padding: '16px', borderRadius: '6px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500, color: '#f5222d' }}>
-                  驳回至节点
-                </label>
-                <select
-                  className="select"
-                  value={rejectToNode}
-                  onChange={(e) => setRejectToNode(e.target.value)}
-                >
-                  <option value="">请选择驳回节点</option>
-                  <option value="start">发起人（重新填写）</option>
-                  <option value="dept_manager">部门经理</option>
-                  <option value="finance">财务</option>
-                </select>
-              </div>
-            )}
-
-            {/* 转办用户输入 */}
-            {showTransfer && (
-              <div className="mb-16" style={{ background: 'var(--info-light)', padding: '16px', borderRadius: '6px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500, color: '#1890ff' }}>
-                  转办给
-                </label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="请输入用户ID或姓名"
-                  value={transferUserId}
-                  onChange={(e) => setTransferUserId(e.target.value)}
-                />
-              </div>
-            )}
-
-            {/* 操作按钮 */}
-            <div className="flex gap-12">
-              <button
-                className="btn btn-success"
-                onClick={handleApprove}
-                disabled={actionLoading}
-              >
-                ✓ 通过
-              </button>
-              <button
-                className="btn btn-danger"
-                onClick={() => {
-                  setShowReject(!showReject)
-                  setShowTransfer(false)
-                  if (showReject) handleReject()
-                }}
-                disabled={actionLoading}
-              >
-                ✗ 驳回
-              </button>
-              <button
-                className="btn"
-                onClick={() => {
-                  setShowTransfer(!showTransfer)
-                  setShowReject(false)
-                  if (showTransfer) handleTransfer()
-                }}
-                disabled={actionLoading}
-              >
-                转办
-              </button>
-              <button
-                className="btn"
-                onClick={() => navigate(`/tracking/${detail.id}`)}
-              >
-                查看流程
-              </button>
-            </div>
-          </div>
+  if (loadError || !detail) {
+    return (
+      <div className="mx-auto max-w-5xl p-6">
+        <div className="card">
+          <ErrorState message={loadError || '任务不存在'} />
         </div>
       </div>
+    )
+  }
+
+  const { task, instance, bpmnXml, completedActivityIds, currentActivityIds, approvalRecords } = detail
+
+  // 当前登录人是否可操作：任务待办且（被指派给自己 或 候选角色命中）
+  const canOperate =
+    task.status === 'PENDING' &&
+    !!user &&
+    (task.assignee === user.id ||
+      task.assignee === user.username ||
+      task.candidateRoles.some((role) => user.roles.includes(role)))
+
+  // 可驳回节点：BPMN XML 中的 userTask（排除当前节点）
+  const rejectableNodes = parseUserTasks(bpmnXml).filter((node) => node.id !== task.nodeKey)
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-5 p-6">
+      {/* 实例信息卡 */}
+      <InstanceInfoCard instance={instance} formFields={formFields} />
+
+      {/* 任务信息 */}
+      <div className="card p-5">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+          <span className="text-slate-500 dark:text-slate-400">
+            任务节点：
+            <span className="font-medium text-slate-800 dark:text-slate-200">{task.nodeName}</span>
+          </span>
+          <span className="text-slate-500 dark:text-slate-400">
+            创建时间：
+            <span className="font-medium text-slate-800 dark:text-slate-200">
+              {formatDateTime(task.createTime)}
+            </span>
+          </span>
+          {task.candidateRoles.length > 0 && (
+            <span className="text-slate-500 dark:text-slate-400">
+              候选角色：
+              <span className="font-medium text-slate-800 dark:text-slate-200">
+                {task.candidateRoles.join('、')}
+              </span>
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* BPMN 流程图 */}
+      <div className="card p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">流程图</h3>
+          <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />已完成
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm bg-blue-500" />进行中
+            </span>
+          </div>
+        </div>
+        {bpmnXml ? (
+          <BpmnViewer
+            xml={bpmnXml}
+            completedActivityIds={completedActivityIds}
+            currentActivityIds={currentActivityIds}
+          />
+        ) : (
+          <EmptyState icon="🗺️" title="暂无流程图" />
+        )}
+      </div>
+
+      {/* 审批历史 */}
+      <div className="card p-5">
+        <h3 className="mb-4 text-sm font-semibold text-slate-900 dark:text-slate-100">审批历史</h3>
+        <ApprovalTimeline records={approvalRecords} />
+      </div>
+
+      {/* 底部操作栏 */}
+      {canOperate ? (
+        <div className="card sticky bottom-4 flex flex-wrap items-center justify-between gap-3 border-primary-200 p-4 dark:border-primary-500/30">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            该任务等待你处理，请谨慎操作
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn btn-success" onClick={() => openModal('approve')}>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              通过
+            </button>
+            <button type="button" className="btn btn-danger" onClick={() => openModal('reject')}>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              驳回
+            </button>
+            <button type="button" className="btn btn-violet" onClick={() => openModal('transfer')}>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                />
+              </svg>
+              转办
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="card p-4 text-center text-sm text-slate-500 dark:text-slate-400">
+          {task.status === 'PENDING' ? '该任务当前不由你处理，仅供查看' : '任务已办结，仅供查看'}
+          {task.comment && (
+            <span className="ml-2 text-slate-600 dark:text-slate-300">处理意见：{task.comment}</span>
+          )}
+        </div>
+      )}
+
+      {/* 通过弹窗 */}
+      <Modal
+        open={modal === 'approve'}
+        title="通过审批"
+        onClose={closeModal}
+        footer={
+          <>
+            <button type="button" className="btn btn-secondary" onClick={closeModal} disabled={submitting}>
+              取消
+            </button>
+            <button type="button" className="btn btn-success" onClick={handleSubmitApprove} disabled={submitting}>
+              {submitting ? '提交中…' : '确认通过'}
+            </button>
+          </>
+        }
+      >
+        <div>
+          <label className="form-label" htmlFor="approve-comment">
+            审批意见（可选）
+          </label>
+          <textarea
+            id="approve-comment"
+            className="input min-h-[80px] resize-y"
+            placeholder="请输入审批意见"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            disabled={submitting}
+          />
+        </div>
+      </Modal>
+
+      {/* 驳回弹窗 */}
+      <Modal
+        open={modal === 'reject'}
+        title="驳回审批"
+        onClose={closeModal}
+        footer={
+          <>
+            <button type="button" className="btn btn-secondary" onClick={closeModal} disabled={submitting}>
+              取消
+            </button>
+            <button type="button" className="btn btn-danger" onClick={handleSubmitReject} disabled={submitting}>
+              {submitting ? '提交中…' : '确认驳回'}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="form-label" htmlFor="reject-target">
+              驳回目标
+            </label>
+            <select
+              id="reject-target"
+              className="input"
+              value={toNodeKey}
+              onChange={(e) => setToNodeKey(e.target.value)}
+              disabled={submitting}
+            >
+              <option value="">整单驳回（流程结束）</option>
+              {rejectableNodes.map((node) => (
+                <option key={node.id} value={node.id}>
+                  驳回到：{node.name}（{node.id}）
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              不选择节点时，默认整单驳回并结束流程
+            </p>
+          </div>
+          <div>
+            <label className="form-label" htmlFor="reject-comment">
+              驳回意见 <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              id="reject-comment"
+              className="input min-h-[80px] resize-y"
+              placeholder="请输入驳回原因"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              disabled={submitting}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      {/* 转办弹窗 */}
+      <Modal
+        open={modal === 'transfer'}
+        title="转办任务"
+        onClose={closeModal}
+        footer={
+          <>
+            <button type="button" className="btn btn-secondary" onClick={closeModal} disabled={submitting}>
+              取消
+            </button>
+            <button type="button" className="btn btn-violet" onClick={handleSubmitTransfer} disabled={submitting}>
+              {submitting ? '提交中…' : '确认转办'}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="form-label" htmlFor="transfer-user">
+              转办给 <span className="text-red-500">*</span>
+            </label>
+            <select
+              id="transfer-user"
+              className="input"
+              value={toUserId}
+              onChange={(e) => setToUserId(e.target.value)}
+              disabled={submitting}
+            >
+              <option value="">请选择转办人</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.realName || u.username}
+                  {u.position ? `（${u.position}）` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="form-label" htmlFor="transfer-comment">
+              转办意见 <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              id="transfer-comment"
+              className="input min-h-[80px] resize-y"
+              placeholder="请说明转办原因"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              disabled={submitting}
+            />
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

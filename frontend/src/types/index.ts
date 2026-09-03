@@ -1,164 +1,173 @@
-// 通用 API 响应结构
+// ========== 通用 ==========
+
 export interface ApiResponse<T = unknown> {
   code: number
   message: string
   data: T
 }
 
-// 用户
-export interface User {
+// ========== 认证 / 用户 ==========
+
+export interface UserInfo {
   id: string
   username: string
-  nickname: string
+  realName: string
   email: string
   phone: string
-  department: string
-  role: string
-  avatar?: string
+  position: string
+  roles: string[]
 }
 
-// 登录响应
 export interface LoginResult {
-  token: string
+  accessToken: string
   refreshToken: string
-  user: User
+  tokenType: string
+  expiresIn: number
+  userInfo: UserInfo
 }
 
-// 优先级
-export type Priority = 'low' | 'normal' | 'high' | 'urgent'
-
-// 任务状态
-export type TaskStatus = 'pending' | 'processing' | 'completed' | 'rejected' | 'overdue'
-
-// 任务
-export interface Task {
+export interface UserSummary {
   id: string
-  serialNo: string
-  title: string
-  initiator: string
-  initiatorDept: string
-  type: string
-  amount: number
-  priority: Priority
-  status: TaskStatus
-  deadline: string
-  createdAt: string
-  currentNode: string
-  currentNodeKey: string
-  description?: string
+  username: string
+  realName: string
+  position: string
+  roles: string[]
 }
 
-// 任务详情
-export interface TaskDetail extends Task {
-  businessDetails: BusinessDetail[]
-  attachments: Attachment[]
-  approvalChain: ApprovalNode[]
-}
-
-// 业务明细
-export interface BusinessDetail {
+export interface Role {
   id: string
-  label: string
-  value: string
-}
-
-// 附件
-export interface Attachment {
-  id: string
+  code: string
   name: string
-  size: number
-  type: string
-  url: string
-  uploadedAt: string
 }
 
-// 审批节点
-export interface ApprovalNode {
-  id: string
-  name: string
-  nodeKey: string
-  approver: string
-  approverId: string
-  status: 'completed' | 'current' | 'pending' | 'skipped'
-  action?: string
-  comment?: string
-  time?: string
-}
+// ========== 审批模板 ==========
 
-// 审批记录
-export interface ApprovalRecord {
-  id: string
-  step: number
-  node: string
-  operator: string
-  operatorId: string
-  action: string
-  comment: string
-  time: string
-}
+export type TemplateStatus = 'DRAFT' | 'PUBLISHED' | 'DISABLED'
 
-// 流程定义
-export interface ProcessDefinition {
+export interface Template {
   id: string
-  key: string
+  defKey: string
   name: string
   version: number
-  description: string
-  deployedAt: string
-}
-
-// 流程节点(进度图)
-export interface ProcessNode {
-  id: string
-  name: string
-  type: 'start' | 'approval' | 'end'
-  assignee?: string
-  status: 'completed' | 'current' | 'pending' | 'rejected'
-  operator?: string
-  action?: string
-  comment?: string
-  time?: string
-}
-
-// 流程实例
-export interface ProcessInstance {
-  id: string
-  serialNo: string
-  definitionId: string
-  definitionName: string
-  businessKey: string
-  title: string
-  status: 'running' | 'completed' | 'canceled' | 'rejected'
-  initiator: string
-  initiatorId: string
-  currentNode: string
-  currentNodeKey: string
-  startTime: string
-  endTime?: string
-  duration?: string
-  nodes: ProcessNode[]
-  records: ApprovalRecord[]
-}
-
-// 公文
-export interface Document {
-  id: string
-  serialNo: string
-  title: string
-  type: string
   category: string
-  status: 'draft' | 'published' | 'archived'
-  author: string
-  department: string
-  content: string
-  createdAt: string
-  updatedAt: string
+  status: TemplateStatus
+  formConfig: string
+  /** 仅 GET /api/process-definitions/{id} 单查时返回 */
+  bpmnXml?: string
+  publishedAt?: string | null
 }
 
-// 启动流程实例的请求体
-export interface StartProcessRequest {
-  processDefinitionKey: string
-  businessKey: string
+export interface TemplateCreatePayload {
+  defKey: string
+  name: string
+  category: string
+  formConfig: string
+  bpmnXml: string
+}
+
+export interface TemplateUpdatePayload {
+  name: string
+  category: string
+  formConfig: string
+  bpmnXml: string
+}
+
+// ========== 表单配置 ==========
+
+export type FormFieldType = 'number' | 'text' | 'textarea' | 'select'
+
+export interface FormField {
+  key: string
+  label: string
+  type: FormFieldType
+  required: boolean
+  options?: string[]
+}
+
+export interface FormConfig {
+  fields: FormField[]
+}
+
+// ========== 流程实例 ==========
+
+export type InstanceStatus = 'RUNNING' | 'COMPLETED' | 'CANCELLED' | 'REJECTED'
+
+export interface InstanceDTO {
+  id: string
+  instanceNo: string
+  defId: string
+  defKey: string
+  defName: string
+  defVersion: number
   title: string
-  variables: Record<string, unknown>
+  initiatorId: string
+  initiatorName: string
+  businessType: string
+  businessData: string
+  currentNode: string
+  currentNodeName: string
+  status: InstanceStatus
+  priority: number
+  submittedAt: string
+  completedAt?: string | null
+}
+
+export interface StartInstancePayload {
+  defId: string
+  title: string
+  businessData: string
+}
+
+export type ApprovalAction = 'SUBMIT' | 'APPROVE' | 'REJECT' | 'TRANSFER' | 'CANCEL'
+
+export interface ApprovalRecordDTO {
+  id: string
+  taskId: string
+  nodeKey: string
+  nodeName: string
+  action: ApprovalAction
+  operatorName: string
+  comment?: string | null
+  fromNode?: string | null
+  toNode?: string | null
+  createdAt: string
+}
+
+export interface InstanceDetail {
+  instance: InstanceDTO
+  bpmnXml: string
+  completedActivityIds: string[]
+  currentActivityIds: string[]
+  approvalRecords: ApprovalRecordDTO[]
+}
+
+// ========== 审批任务 ==========
+
+export type TaskStatus = 'PENDING' | 'COMPLETED' | 'REJECTED'
+
+export interface TaskDTO {
+  id: string
+  instanceId: string
+  title: string
+  defKey: string
+  defName: string
+  nodeKey: string
+  nodeName: string
+  assignee: string
+  candidateRoles: string[]
+  createTime: string
+  endTime?: string | null
+  priority: number
+  initiatorName: string
+  status: TaskStatus
+  comment?: string | null
+}
+
+export interface TaskDetail {
+  task: TaskDTO
+  instance: InstanceDTO
+  bpmnXml: string
+  completedActivityIds: string[]
+  currentActivityIds: string[]
+  approvalRecords: ApprovalRecordDTO[]
 }

@@ -37,7 +37,7 @@ public class Document extends BaseEntity {
     private String title;
 
     @Lob
-    @Column(name = "content")
+    @Column(name = "content", columnDefinition = "TEXT")
     private String content;
 
     @Enumerated(EnumType.ORDINAL)

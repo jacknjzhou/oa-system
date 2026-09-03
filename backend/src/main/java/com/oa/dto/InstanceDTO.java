@@ -1,0 +1,52 @@
+package com.oa.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+/**
+ * 流程实例视图（业务快照 + 当前节点信息）。
+ */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class InstanceDTO {
+
+    private Long id;
+
+    private String instanceNo;
+
+    private Long defId;
+
+    private String defKey;
+
+    private String defName;
+
+    private Integer defVersion;
+
+    private String title;
+
+    private Long initiatorId;
+
+    private String initiatorName;
+
+    private String businessType;
+
+    /** 业务表单数据（JSON 字符串） */
+    private String businessData;
+
+    /** 当前活动节点 key（BPMN 活动 id） */
+    private String currentNode;
+
+    private String currentNodeName;
+
+    /** RUNNING / COMPLETED / CANCELLED / REJECTED */
+    private String status;
+
+    /** 紧急度：0=普通，1=重要，2=紧急 */
+    private Integer priority;
+
+    private String submittedAt;
+
+    private String completedAt;
+}

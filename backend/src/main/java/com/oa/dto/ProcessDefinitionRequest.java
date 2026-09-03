@@ -18,8 +18,10 @@ public class ProcessDefinitionRequest {
 
     private String category;
 
+    private String description;
+
     private String formConfig;
 
-    @NotBlank(message = "节点配置不能为空")
-    private String nodeJson;
+    @NotBlank(message = "BPMN XML不能为空")
+    private String bpmnXml;
 }

@@ -8,6 +8,4 @@ import java.util.List;
 public interface ApprovalRecordRepository extends JpaRepository<ApprovalRecord, Long> {
 
     List<ApprovalRecord> findByInstanceIdOrderByCreatedAtAsc(Long instanceId);
-
-    List<ApprovalRecord> findByTaskId(Long taskId);
 }

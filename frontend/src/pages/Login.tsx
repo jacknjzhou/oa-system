@@ -1,158 +1,122 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, type FormEvent } from 'react'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { login } from '../api/auth'
+import { getToken } from '../api/auth'
+import { useToast } from '../components/Toast'
+
+const DEMO_ACCOUNTS = ['admin', 'manager', 'employee']
 
 export default function Login() {
   const navigate = useNavigate()
-  const [username, setUsername] = useState('admin')
-  const [password, setPassword] = useState('admin123')
-  const [loading, setLoading] = useState(false)
+  const { showToast } = useToast()
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  if (getToken()) {
+    return <Navigate to="/start" replace />
+  }
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    setLoading(true)
+    if (!username.trim() || !password) {
+      setError('请输入用户名和密码')
+      return
+    }
     setError('')
+    setLoading(true)
     try {
-      await login(username, password)
-      navigate('/')
+      const result = await login(username.trim(), password)
+      showToast(`欢迎回来，${result.userInfo.realName || result.userInfo.username}`, 'success')
+      navigate('/start', { replace: true })
     } catch (err) {
-      setError('登录失败，请检查用户名和密码')
-      console.error('Login error:', err)
+      setError(err instanceof Error ? err.message : '登录失败，请稍后重试')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <div style={styles.header}>
-          <div style={styles.logo}>OA</div>
-          <h1 style={styles.title}>OA 审批系统</h1>
-          <p style={styles.subtitle}>办公自动化审批管理平台</p>
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-indigo-600 via-indigo-500 to-violet-600 p-4">
+      <div className="w-full max-w-md">
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-3xl font-bold text-white ring-1 ring-white/20 backdrop-blur">
+            OA
+          </div>
+          <h1 className="text-2xl font-bold text-white">OA 审批系统</h1>
+          <p className="mt-1 text-sm text-indigo-200">Flowable 工作流 · 高效协作审批</p>
         </div>
 
-        {error && <div style={styles.error}>{error}</div>}
+        <div className="rounded-2xl bg-white p-8 shadow-2xl dark:bg-slate-800">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="form-label" htmlFor="username">
+                用户名
+              </label>
+              <input
+                id="username"
+                className="input"
+                type="text"
+                autoComplete="username"
+                placeholder="请输入用户名"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="form-label" htmlFor="password">
+                密码
+              </label>
+              <input
+                id="password"
+                className="input"
+                type="password"
+                autoComplete="current-password"
+                placeholder="请输入密码"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
 
-        <form onSubmit={handleSubmit} style={styles.form}>
-          <div style={styles.formGroup}>
-            <label style={styles.label}>用户名</label>
-            <input
-              type="text"
-              className="input"
-              style={styles.input}
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="请输入用户名"
-              required
-            />
-          </div>
-          <div style={styles.formGroup}>
-            <label style={styles.label}>密码</label>
-            <input
-              type="password"
-              className="input"
-              style={styles.input}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="请输入密码"
-              required
-            />
-          </div>
-          <button
-            type="submit"
-            className="btn btn-primary btn-block btn-lg"
-            style={styles.submitBtn}
-            disabled={loading}
-          >
-            {loading ? '登录中...' : '登 录'}
-          </button>
-        </form>
+            {error && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+                {error}
+              </div>
+            )}
 
-        <div style={styles.footer}>
-          <span>默认账号: admin / admin123</span>
+            <button type="submit" className="btn btn-primary w-full py-2.5" disabled={loading}>
+              {loading ? '登录中…' : '登 录'}
+            </button>
+          </form>
+
+          <div className="mt-6 border-t border-slate-100 pt-4 dark:border-slate-700">
+            <p className="mb-2 text-center text-xs text-slate-400 dark:text-slate-500">
+              演示账号（点击填入）
+            </p>
+            <div className="flex justify-center gap-2">
+              {DEMO_ACCOUNTS.map((account) => (
+                <button
+                  key={account}
+                  type="button"
+                  className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-primary-50 hover:text-primary-700 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-primary-500/20 dark:hover:text-primary-300"
+                  onClick={() => {
+                    setUsername(account)
+                    setPassword('')
+                    setError('')
+                  }}
+                >
+                  {account}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
+
+        <p className="mt-6 text-center text-xs text-indigo-200/70">
+          © {new Date().getFullYear()} OA 审批系统 · Powered by Flowable
+        </p>
       </div>
     </div>
   )
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-  },
-  card: {
-    width: '400px',
-    background: '#fff',
-    borderRadius: '12px',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-    padding: '40px 36px',
-  },
-  header: {
-    textAlign: 'center',
-    marginBottom: '32px',
-  },
-  logo: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '56px',
-    height: '56px',
-    borderRadius: '12px',
-    background: 'linear-gradient(135deg, #2f54eb, #1d39c4)',
-    color: '#fff',
-    fontSize: '24px',
-    fontWeight: 700,
-    marginBottom: '16px',
-  },
-  title: {
-    fontSize: '24px',
-    color: '#1f1f1f',
-    marginBottom: '4px',
-  },
-  subtitle: {
-    fontSize: '14px',
-    color: '#8c8c8c',
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  formGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-  },
-  label: {
-    fontSize: '14px',
-    color: '#595959',
-    fontWeight: 500,
-  },
-  input: {
-    height: '40px',
-  },
-  submitBtn: {
-    marginTop: '8px',
-  },
-  footer: {
-    textAlign: 'center',
-    marginTop: '24px',
-    color: '#bfbfbf',
-    fontSize: '12px',
-  },
-  error: {
-    background: '#fff1f0',
-    border: '1px solid #ffa39e',
-    color: '#f5222d',
-    padding: '8px 12px',
-    borderRadius: '6px',
-    marginBottom: '16px',
-    fontSize: '13px',
-  },
 }

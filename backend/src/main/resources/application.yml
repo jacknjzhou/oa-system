@@ -5,7 +5,7 @@ spring:
   application:
     name: oa-backend
   datasource:
-    url: jdbc:h2:mem:oadb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=MySQL
+    url: jdbc:h2:mem:oadb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=LEGACY
     driver-class-name: org.h2.Driver
     username: sa
     password:
@@ -25,6 +25,17 @@ spring:
   sql:
     init:
       mode: always
+
+flowable:
+  # 启动时自动创建/更新引擎表结构
+  database-schema-update: true
+  # 审批流全部为同步串行，无需异步执行器
+  async-executor-activate: false
+  # 自动部署 classpath:/processes/ 下的 BPMN 文件
+  process-definition-location-prefix: classpath*:/processes/
+  process-definition-location-suffixes:
+    - "**.bpmn20.xml"
+  history-level: audit
 
 jwt:
   secret: ZmQ0YjVkNzVmYzQ3ZGE3MmY3YjRkM2Q1YzNjYzRlZjQ4YjRkM2Q1YzNjYzRlZjQ4YjRkM2Q1YzNjYzRlZjQ=

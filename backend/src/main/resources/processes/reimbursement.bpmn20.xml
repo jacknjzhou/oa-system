@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             targetNamespace="http://flowable.org/samples"
+             typeLanguage="http://www.w3.org/2001/XMLSchema"
+             expressionLanguage="http://www.w3.org/1999/XPath">
+
+  <process id="reimbursement" name="报销审批" isExecutable="true">
+
+    <startEvent id="start" name="开始">
+      <outgoing>flow1</outgoing>
+    </startEvent>
+
+    <userTask id="dept_manager" name="部门经理审批" flowable:candidateGroups="MANAGER">
+      <incoming>flow1</incoming>
+      <outgoing>flow2</outgoing>
+    </userTask>
+
+    <exclusiveGateway id="amount_gateway" name="金额判断">
+      <incoming>flow2</incoming>
+      <outgoing>flow3</outgoing>
+      <outgoing>flow4</outgoing>
+    </exclusiveGateway>
+
+    <userTask id="gm_manager" name="总经理审批" flowable:candidateGroups="ADMIN">
+      <incoming>flow3</incoming>
+      <outgoing>flow5</outgoing>
+    </userTask>
+
+    <endEvent id="end" name="结束">
+      <incoming>flow4</incoming>
+      <incoming>flow5</incoming>
+    </endEvent>
+
+    <sequenceFlow id="flow1" sourceRef="start" targetRef="dept_manager"/>
+    <sequenceFlow id="flow2" sourceRef="dept_manager" targetRef="amount_gateway"/>
+    <sequenceFlow id="flow3" name="金额 > 1万" sourceRef="amount_gateway" targetRef="gm_manager">
+      <conditionExpression xsi:type="bpmn:tFormalExpression">${amount &gt; 10000}</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flow4" name="默认" sourceRef="amount_gateway" targetRef="end">
+      <conditionExpression xsi:type="bpmn:tFormalExpression">${amount &lt;= 10000}</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flow5" sourceRef="gm_manager" targetRef="end"/>
+
+  </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_reimbursement">
+    <bpmndi:BPMNPlane bpmnElement="reimbursement" id="BPMNPlane_reimbursement">
+      <bpmndi:BPMNShape bpmnElement="start" id="BPMNShape_start">
+        <omgdc:Bounds height="30" width="30" x="100" y="163"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="dept_manager" id="BPMNShape_dept_manager">
+        <omgdc:Bounds height="60" width="100" x="190" y="148"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="amount_gateway" id="BPMNShape_amount_gateway">
+        <omgdc:Bounds height="40" width="40" x="350" y="158"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="gm_manager" id="BPMNShape_gm_manager">
+        <omgdc:Bounds height="60" width="100" x="460" y="60"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="end" id="BPMNShape_end">
+        <omgdc:Bounds height="28" width="28" x="620" y="164"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge bpmnElement="flow1" id="BPMNEdge_flow1">
+        <omgdi:waypoint x="130" y="178"/>
+        <omgdi:waypoint x="190" y="178"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow2" id="BPMNEdge_flow2">
+        <omgdi:waypoint x="290" y="178"/>
+        <omgdi:waypoint x="350" y="178"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow3" id="BPMNEdge_flow3">
+        <omgdi:waypoint x="370" y="158"/>
+        <omgdi:waypoint x="370" y="90"/>
+        <omgdi:waypoint x="460" y="90"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow4" id="BPMNEdge_flow4">
+        <omgdi:waypoint x="390" y="178"/>
+        <omgdi:waypoint x="620" y="178"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow5" id="BPMNEdge_flow5">
+        <omgdi:waypoint x="560" y="90"/>
+        <omgdi:waypoint x="634" y="90"/>
+        <omgdi:waypoint x="634" y="164"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
+</definitions>

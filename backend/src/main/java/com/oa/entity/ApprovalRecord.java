@@ -19,7 +19,7 @@ import lombok.ToString;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-@ToString(callSuper = true, exclude = {"instance", "task", "operator"})
+@ToString(callSuper = true, exclude = {"instance", "operator"})
 @Entity
 @Table(name = "approval_record")
 public class ApprovalRecord extends BaseEntity {
@@ -29,13 +29,15 @@ public class ApprovalRecord extends BaseEntity {
     @JoinColumn(name = "instance_id")
     private ProcessInstance instance;
 
-    @JsonIgnore
-    @ManyToOne
-    @JoinColumn(name = "task_id")
-    private Task task;
+    /** Flowable 任务 ID（发起/取消动作时可为空） */
+    @Column(name = "flowable_task_id", length = 64)
+    private String taskId;
 
     @Column(name = "node_key", length = 64)
     private String nodeKey;
+
+    @Column(name = "node_name", length = 128)
+    private String nodeName;
 
     @Enumerated(EnumType.ORDINAL)
     @Column(name = "action", nullable = false)

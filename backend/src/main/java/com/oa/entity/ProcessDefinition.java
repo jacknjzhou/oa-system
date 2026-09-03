@@ -22,7 +22,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-@ToString(callSuper = true, exclude = {"creator", "formConfig", "nodeJson"})
+@ToString(callSuper = true, exclude = {"creator", "formConfig", "bpmnXml"})
 @Entity
 @Table(name = "process_definition")
 public class ProcessDefinition extends BaseEntity {
@@ -39,13 +39,17 @@ public class ProcessDefinition extends BaseEntity {
     @Column(name = "category", length = 64)
     private String category;
 
-    @Lob
-    @Column(name = "form_config")
-    private String formConfig;
+    @Column(name = "description", length = 500)
+    private String description;
 
     @Lob
-    @Column(name = "node_json", nullable = false)
-    private String nodeJson;
+    @Column(name = "form_config", columnDefinition = "TEXT")
+    private String formConfig;
+
+    /** BPMN 2.0 标准 XML（与 Flowable 部署保持同步） */
+    @Lob
+    @Column(name = "bpmn_xml", nullable = false, columnDefinition = "TEXT")
+    private String bpmnXml;
 
     @Enumerated(EnumType.ORDINAL)
     @Column(name = "status", nullable = false)
