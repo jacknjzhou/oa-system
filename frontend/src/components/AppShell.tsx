@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useTheme } from './Theme'
 import { getStoredUser, logout } from '../api/auth'
+import NotificationBell from './NotificationBell'
 
 interface NavItem {
   to: string
@@ -143,6 +144,7 @@ export default function AppShell() {
             <h1 className="font-semibold text-slate-900 dark:text-slate-100">{title}</h1>
           </div>
           <div className="flex items-center gap-3">
+            <NotificationBell />
             <button
               type="button"
               onClick={toggleTheme}

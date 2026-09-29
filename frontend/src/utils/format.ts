@@ -9,6 +9,20 @@ export function formatDateTime(iso?: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+/** 相对时间：刚刚 / x 分钟前 / x 小时前 / 超过 24 小时回退为日期时间 */
+export function formatRelativeTime(iso?: string | null): string {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const diffMs = Date.now() - d.getTime()
+  const minutes = Math.floor(diffMs / 60_000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes} 分钟前`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} 小时前`
+  return formatDateTime(iso)
+}
+
 /** 解析模板 formConfig JSON 字符串 */
 export function parseFormConfig(formConfig?: string | null): FormConfig {
   if (!formConfig) return { fields: [] }

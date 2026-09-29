@@ -171,3 +171,17 @@ export interface TaskDetail {
   currentActivityIds: string[]
   approvalRecords: ApprovalRecordDTO[]
 }
+
+// ========== 站内通知 ==========
+
+export interface Notification {
+  id: number
+  title: string
+  content: string
+  notifyType: 'TASK' | 'PROCESS' | 'DOCUMENT' | 'SYSTEM'
+  refType: 'TASK' | 'PROCESS_INSTANCE' | 'DOCUMENT'
+  refId: string
+  isRead: boolean
+  createdAt: string
+  readAt?: string | null
+}
