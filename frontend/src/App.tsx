@@ -7,6 +7,8 @@ import TaskList from './pages/TaskList'
 import ApprovalForm from './pages/ApprovalForm'
 import ProcessTracking from './pages/ProcessTracking'
 import MyInstances from './pages/MyInstances'
+import DocumentList from './pages/DocumentList'
+import DocumentDetail from './pages/DocumentDetail'
 import TemplateList from './pages/TemplateList'
 import TemplateEditor from './pages/TemplateEditor'
 
@@ -29,6 +31,8 @@ export default function App() {
         <Route path="/task/:id" element={<ApprovalForm />} />
         <Route path="/tracking/:id" element={<ProcessTracking />} />
         <Route path="/my-instances" element={<MyInstances />} />
+        <Route path="/documents" element={<DocumentList />} />
+        <Route path="/documents/:id" element={<DocumentDetail />} />
         <Route path="/templates" element={<TemplateList />} />
         <Route path="/templates/new" element={<TemplateEditor mode="new" />} />
         <Route path="/templates/:id" element={<TemplateEditor mode="edit" />} />

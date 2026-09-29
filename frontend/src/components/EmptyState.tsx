@@ -40,8 +40,19 @@ export function LoadingState({ text = '加载中…' }: { text?: string }) {
   )
 }
 
-export function ErrorState({ message }: { message: string }) {
+export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <EmptyState icon="⚠️" title="加载失败" description={message} />
+    <EmptyState
+      icon="⚠️"
+      title="加载失败"
+      description={message}
+      children={
+        onRetry ? (
+          <button type="button" className="btn btn-primary" onClick={onRetry}>
+            重试
+          </button>
+        ) : undefined
+      }
+    />
   )
 }

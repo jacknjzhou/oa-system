@@ -1,8 +1,8 @@
 package com.oa.controller;
 
 import com.oa.dto.ApiResponse;
+import com.oa.dto.DocumentDTO;
 import com.oa.dto.DocumentRequest;
-import com.oa.entity.Document;
 import com.oa.service.DocumentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -25,27 +25,27 @@ public class DocumentController {
     private final DocumentService documentService;
 
     @PostMapping
-    public ApiResponse<Document> create(@Valid @RequestBody DocumentRequest request) {
+    public ApiResponse<DocumentDTO> create(@Valid @RequestBody DocumentRequest request) {
         return ApiResponse.success(documentService.create(request));
     }
 
     @GetMapping
-    public ApiResponse<List<Document>> list(@RequestParam(required = false) String title) {
+    public ApiResponse<List<DocumentDTO>> list(@RequestParam(required = false) String title) {
         return ApiResponse.success(documentService.list(title));
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<Document> detail(@PathVariable Long id) {
+    public ApiResponse<DocumentDTO> detail(@PathVariable Long id) {
         return ApiResponse.success(documentService.getDetail(id));
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<Document> update(@PathVariable Long id, @Valid @RequestBody DocumentRequest request) {
+    public ApiResponse<DocumentDTO> update(@PathVariable Long id, @Valid @RequestBody DocumentRequest request) {
         return ApiResponse.success(documentService.update(id, request));
     }
 
     @PostMapping("/{id}/archive")
-    public ApiResponse<Document> archive(@PathVariable Long id) {
+    public ApiResponse<DocumentDTO> archive(@PathVariable Long id) {
         return ApiResponse.success(documentService.archive(id));
     }
 }

@@ -185,3 +185,26 @@ export interface Notification {
   createdAt: string
   readAt?: string | null
 }
+
+// ========== 公文 ==========
+
+export type DocType = 'NOTICE' | 'DIRECTIVE' | 'REPORT' | 'LETTER' | 'OTHER'
+export type DocumentStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
+export type DocUrgency = 'NORMAL' | 'URGENT' | 'CRITICAL'
+export type SecrecyLevel = 'PUBLIC' | 'INTERNAL' | 'SECRET' | 'TOP_SECRET'
+
+export interface DocumentDTO {
+  id: number
+  docNo: string
+  title: string
+  content: string
+  docType: DocType
+  urgency: DocUrgency
+  secrecyLevel: SecrecyLevel
+  authorName: string
+  status: DocumentStatus
+  publishedAt?: string | null
+  archivedAt?: string | null
+  createdAt: string
+  updatedAt: string
+}
