@@ -27,14 +27,15 @@ class FlywayBootstrapTest {
 
     @Test
     void contextBootsAndMigrationsApplied() {
-        // 当前迁移版本应为 V3（V1 业务表 / V2 refresh_token / V3 种子）
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("3");
+        // 当前迁移版本应为 V4（V1 业务表 / V2 refresh_token / V3 种子 / V4 财务种子）
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("4");
     }
 
     @Test
     void businessTablesAndSeedDataPresent() {
         assertThat(jdbc.queryForObject("select count(*) from organization", Integer.class)).isGreaterThanOrEqualTo(1);
-        assertThat(jdbc.queryForObject("select count(*) from sys_user", Integer.class)).isGreaterThanOrEqualTo(3);
+        assertThat(jdbc.queryForObject("select count(*) from sys_user", Integer.class)).isGreaterThanOrEqualTo(4);
         assertThat(jdbc.queryForObject("select count(*) from refresh_token", Integer.class)).isNotNull();
+        assertThat(jdbc.queryForObject("select count(*) from role where role_code = 'FINANCE'", Integer.class)).isEqualTo(1);
     }
 }

@@ -139,6 +139,30 @@ export interface InstanceDetail {
   completedActivityIds: string[]
   currentActivityIds: string[]
   approvalRecords: ApprovalRecordDTO[]
+  countersigns: CountersignNode[]
+}
+
+// ========== 会签（多实例并行审批） ==========
+
+export type CountersignElementStatus = 'PENDING' | 'COMPLETED' | 'REJECTED' | 'TERMINATED'
+
+export interface CountersignElement {
+  taskId: string
+  groupCode: string | null
+  groupName: string
+  status: CountersignElementStatus
+  assignee: string | null
+  finishedAt: string | null
+}
+
+export interface CountersignNode {
+  nodeKey: string
+  nodeName: string
+  total: number
+  completed: number
+  rejected: number
+  pending: number
+  elements: CountersignElement[]
 }
 
 // ========== 审批任务 ==========

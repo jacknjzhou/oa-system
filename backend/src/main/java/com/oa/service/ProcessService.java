@@ -16,14 +16,18 @@ import com.oa.enums.Priority;
 import com.oa.enums.ProcessDefinitionStatus;
 import com.oa.enums.ProcessInstanceStatus;
 import com.oa.enums.RefType;
+import com.oa.entity.Role;
 import com.oa.repository.ApprovalRecordRepository;
 import com.oa.repository.ProcessDefinitionRepository;
 import com.oa.repository.ProcessInstanceRepository;
+import com.oa.repository.RoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.flowable.common.engine.api.FlowableException;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
+import org.flowable.task.api.history.HistoricTaskInstance;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,9 +35,12 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -51,6 +58,7 @@ public class ProcessService {
     private final ProcessDefinitionRepository definitionRepository;
     private final ProcessInstanceRepository instanceRepository;
     private final ApprovalRecordRepository approvalRecordRepository;
+    private final RoleRepository roleRepository;
     private final AuthService authService;
     private final NotificationService notificationService;
     private final BpmnXmlService bpmnXmlService;
@@ -59,6 +67,7 @@ public class ProcessService {
     private final RuntimeService runtimeService;
     private final org.flowable.engine.TaskService flowableTaskService;
     private final org.flowable.engine.HistoryService historyService;
+    private final JdbcTemplate jdbcTemplate;
 
     // ==================== 模板管理 ====================
 
@@ -209,7 +218,151 @@ public class ProcessService {
         result.put("currentActivityIds", currentActivityIds(instance));
         result.put("approvalRecords", toRecordDtos(
                 approvalRecordRepository.findByInstanceIdOrderByCreatedAtAsc(id)));
+        result.put("countersigns", getCountersignProgress(instance));
         return result;
+    }
+
+    /**
+     * 会签进度：找出实例中「同一节点存在多个任务」的多实例节点，
+     * 返回每个会签节点的元素明细（候选组、状态、经办人）与汇总计数。
+     * 非会签节点不会出现（任务数 = 1）。
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getCountersignProgress(ProcessInstance instance) {
+        String fpiId = instance.getFlowableInstanceId();
+        if (fpiId == null) {
+            return List.of();
+        }
+        List<org.flowable.task.api.Task> activeTasks = flowableTaskService.createTaskQuery()
+                .processInstanceId(fpiId).active().list();
+        List<HistoricTaskInstance> historicTasks = historyService.createHistoricTaskInstanceQuery()
+                .processInstanceId(fpiId).list();
+
+        // 按节点 key 归并活跃任务与历史任务，多实例节点 = 任务实例数 >= 2
+        Map<String, List<org.flowable.task.api.Task>> activeByKey = new LinkedHashMap<>();
+        for (org.flowable.task.api.Task t : activeTasks) {
+            activeByKey.computeIfAbsent(t.getTaskDefinitionKey(), k -> new java.util.ArrayList<>()).add(t);
+        }
+        Map<String, List<HistoricTaskInstance>> historicByKey = new LinkedHashMap<>();
+        for (HistoricTaskInstance t : historicTasks) {
+            historicByKey.computeIfAbsent(t.getTaskDefinitionKey(), k -> new java.util.ArrayList<>()).add(t);
+        }
+
+        // taskId -> 最近一次审批动作（会签元素状态判定用）
+        Map<String, ApprovalAction> actionByTaskId = new HashMap<>();
+        for (ApprovalRecord r : approvalRecordRepository.findByInstanceIdOrderByCreatedAtAsc(instance.getId())) {
+            if (r.getTaskId() != null && r.getAction() != null) {
+                actionByTaskId.put(r.getTaskId(), r.getAction());
+            }
+        }
+        boolean instanceTerminated = instance.getStatus() == ProcessInstanceStatus.REJECTED
+                || instance.getStatus() == ProcessInstanceStatus.CANCELLED;
+        Map<String, String> roleNames = new HashMap<>();
+
+        // 节点 key 取活跃与历史的并集——多实例节点整体完成后活跃任务为空，仍需展示
+        Set<String> allKeys = new LinkedHashSet<>();
+        allKeys.addAll(activeByKey.keySet());
+        allKeys.addAll(historicByKey.keySet());
+
+        List<Map<String, Object>> nodes = new ArrayList<>();
+        for (String key : allKeys) {
+            List<org.flowable.task.api.Task> eActive = activeByKey.getOrDefault(key, List.of());
+            List<HistoricTaskInstance> hist = historicByKey.getOrDefault(key, List.of());
+            if (eActive.size() + hist.size() < 2) {
+                continue; // 非多实例节点
+            }
+            int completed = 0, rejected = 0, pending = 0;
+            List<Map<String, Object>> elements = new ArrayList<>();
+            for (org.flowable.task.api.Task t : eActive) {
+                pending++;
+                String code = elementGroupCode(fpiId, t.getId(), true);
+                elements.add(countersignElement(key, t.getId(), t.getAssignee(), null,
+                        "PENDING", roleNameByCode(code, roleNames), code));
+            }
+            for (HistoricTaskInstance t : hist) {
+                // 多实例已整体完成时，其子任务不会出现在活跃列表；否则活跃任务即对应元素
+                boolean stillActive = eActive.stream().anyMatch(a -> a.getId().equals(t.getId()));
+                if (stillActive) {
+                    continue;
+                }
+                ApprovalAction action = actionByTaskId.get(t.getId());
+                String status;
+                if (action == ApprovalAction.APPROVE) {
+                    status = "COMPLETED"; completed++;
+                } else if (action == ApprovalAction.REJECT) {
+                    status = "REJECTED"; rejected++;
+                } else {
+                    // 无审批记录：实例被整单终止（驳回/取消）→ TERMINATED；否则视为已完成
+                    status = instanceTerminated ? "TERMINATED" : "COMPLETED";
+                    if ("COMPLETED".equals(status)) {
+                        completed++;
+                    }
+                }
+                String code = elementGroupCode(fpiId, t.getId(), false);
+                elements.add(countersignElement(key, t.getId(), t.getAssignee(),
+                        t.getEndTime() != null ? LocalDateTime.ofInstant(t.getEndTime().toInstant(),
+                                java.time.ZoneId.systemDefault()).format(TS) : null,
+                        status, roleNameByCode(code, roleNames), code));
+            }
+            Map<String, Object> node = new LinkedHashMap<>();
+            node.put("nodeKey", key);
+            node.put("nodeName", currentNodeNameFor(key, instance));
+            node.put("total", elements.size());
+            node.put("completed", completed);
+            node.put("rejected", rejected);
+            node.put("pending", pending);
+            node.put("elements", elements);
+            nodes.add(node);
+        }
+        nodes.sort((a, b) -> String.valueOf(a.get("nodeKey")).compareTo(String.valueOf(b.get("nodeKey"))));
+        return nodes;
+    }
+
+    private Map<String, Object> countersignElement(String nodeKey, String taskId, String assignee,
+                                                    String finishedAt, String status,
+                                                    String groupName, String groupCode) {
+        Map<String, Object> el = new LinkedHashMap<>();
+        el.put("taskId", taskId);
+        el.put("groupCode", groupCode);
+        el.put("groupName", groupName != null ? groupName : (groupCode != null ? groupCode : nodeKey));
+        el.put("status", status);
+        el.put("assignee", assignee);
+        el.put("finishedAt", finishedAt);
+        return el;
+    }
+
+    /** 候选组 code → 角色名（找不到角色时返回 null，由调用方回退显示 code）。 */
+    private String roleNameByCode(String code, Map<String, String> roleNames) {
+        if (code == null) {
+            return null;
+        }
+        return roleNames.computeIfAbsent(code, c -> roleRepository.findByRoleCode(c)
+                .map(Role::getRoleName).orElse(null));
+    }
+
+    /**
+     * 会签元素的候选组 code：元素变量存于多实例循环 execution 作用域（任务作用域查不到），
+     * 故直接 join Flowable 引擎表按任务的 execution 取回。活跃查 ACT_RU_*，已结束查 ACT_HI_*。
+     */
+    private String elementGroupCode(String fpiId, String taskId, boolean active) {
+        // 注意：Flowable 引擎表名为大写（MySQL 表名大小写敏感；H2 会折叠为大写，两库通用）
+        String sql = (active
+                        ? "select v.TEXT_ from ACT_RU_TASK t join ACT_RU_VARIABLE v "
+                        : "select v.TEXT_ from ACT_HI_TASKINST t join ACT_HI_VARINST v ")
+                + "on v.EXECUTION_ID_ = t.EXECUTION_ID_ and v.NAME_ = 'countersignGroup' "
+                + "where t.ID_ = ? and t.PROC_INST_ID_ = ?";
+        try {
+            List<String> values = jdbcTemplate.queryForList(sql, String.class, taskId, fpiId);
+            return values.isEmpty() ? null : values.get(0);
+        } catch (Exception e) {
+            log.debug("会签元素变量查询失败 taskId={}: {}", taskId, e.getMessage());
+            return null;
+        }
+    }
+
+    private String currentNodeNameFor(String nodeKey, ProcessInstance instance) {
+        Map<String, String> names = bpmnXmlService.userTaskNameMap(instance.getDef().getBpmnXml());
+        return names.getOrDefault(nodeKey, nodeKey);
     }
 
     @Transactional

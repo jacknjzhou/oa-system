@@ -34,6 +34,15 @@
 
 6 大微服务：用户与组织、工作流引擎、公文管理、审批管理、日程与任务、消息通知
 
+## 流程引擎（Flowable）
+
+- **双源架构**：Flowable 引擎表是流程运行时事实源（活动节点、多实例状态），自有表（`process_instance`/`process_node`/`approval_record`）存业务快照；每次引擎动作后 `syncInstanceAfterAction()` 收敛两侧
+- **角色即候选组**：BPMN `candidateGroups` 写角色 code，待办 = 指派人 ∪ 所属角色候选
+- **会签（多实例并行）**：报销流程金额 > 10000 时进入会签节点（`FINANCE`+`MANAGER` 并行，`completionCondition` 要求全部完成，任一拒绝即驳回流程）；`≤ 10000` 直走部门经理→完成，不受影响
+- **会签进度**：流程详情接口返回 `countersigns[]`（节点级 `total/completed/rejected/pending` + 每元素 `groupCode/status/assignee`）；元素变量存于多实例循环 execution 作用域，由服务层 join Flowable 引擎表（`ACT_RU_*`/`ACT_HI_*`，注意 MySQL 表名大小写敏感）取回
+- **演示账号**（V3/V4 播种）：`admin/admin123`（含总经理与系统管理）、`manager/manager123`、`employee/employee123`、`finance/finance123`
+- 模板 XML 修改后经「流程模板」页面更新并部署新版本，**存量流程实例继续按旧版本跑到结束**（Flowable 语义）
+
 ## 容器化开发与部署
 
 ### 前置条件

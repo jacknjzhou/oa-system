@@ -44,7 +44,7 @@ public class ProcessTemplateSeeder implements ApplicationRunner {
         def.setName("报销审批");
         def.setVersion(1);
         def.setCategory("finance");
-        def.setDescription("金额超过 1 万需总经理加签审批");
+        def.setDescription("金额超过 1 万需财务与部门经理会签，再总经理审批");
         def.setFormConfig("""
                 {"fields":[
                   {"key":"amount","label":"金额","type":"number","required":true},

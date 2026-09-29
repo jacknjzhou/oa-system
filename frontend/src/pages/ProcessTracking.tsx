@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import type { FormField, InstanceDetail } from '../types'
+import type { CountersignElementStatus, FormField, InstanceDetail } from '../types'
 import { cancelInstance, getInstance } from '../api/process'
 import { getTemplate } from '../api/template'
 import { getStoredUser } from '../api/auth'
@@ -78,9 +78,27 @@ export default function ProcessTracking() {
     )
   }
 
-  const { instance, bpmnXml, completedActivityIds, currentActivityIds, approvalRecords } = detail
+  const { instance, bpmnXml, completedActivityIds, currentActivityIds, approvalRecords, countersigns } = detail
   const isInitiator = !!user && instance.initiatorId === user.id
   const cancellable = instance.status === 'RUNNING' && isInitiator
+
+  function countersignStatusLabel(status: CountersignElementStatus): string {
+    switch (status) {
+      case 'PENDING': return '待审批'
+      case 'COMPLETED': return '已通过'
+      case 'REJECTED': return '已驳回'
+      default: return '已终止'
+    }
+  }
+
+  function countersignStatusClass(status: CountersignElementStatus): string {
+    switch (status) {
+      case 'PENDING': return 'bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400'
+      case 'COMPLETED': return 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400'
+      case 'REJECTED': return 'bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400'
+      default: return 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+    }
+  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 p-6">
@@ -110,6 +128,51 @@ export default function ProcessTracking() {
           <EmptyState icon="🗺️" title="暂无流程图" />
         )}
       </div>
+
+      {/* 会签进度（仅多实例并行审批节点会出现） */}
+      {countersigns.length > 0 && (
+        <div className="card p-5">
+          <h3 className="mb-4 text-sm font-semibold text-slate-900 dark:text-slate-100">会签进度</h3>
+          <div className="space-y-4">
+            {countersigns.map((node) => (
+              <div key={node.nodeKey}>
+                <div className="mb-2 flex items-center justify-between text-xs">
+                  <span className="font-medium text-slate-700 dark:text-slate-300">{node.nodeName}</span>
+                  <span className="text-slate-500 dark:text-slate-400">
+                    已通过 {node.completed}/{node.total} 人
+                  </span>
+                </div>
+                <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                  <div
+                    className="h-full rounded-full bg-emerald-500 transition-all"
+                    style={{ width: `${node.total > 0 ? (node.completed / node.total) * 100 : 0}%` }}
+                  />
+                </div>
+                <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {node.elements.map((el) => (
+                    <li
+                      key={el.taskId}
+                      className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 dark:border-slate-800"
+                    >
+                      <span className="text-xs text-slate-700 dark:text-slate-300">
+                        {el.groupName}
+                        {el.assignee ? `（${el.assignee}）` : ''}
+                      </span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                          countersignStatusClass(el.status)
+                        }`}
+                      >
+                        {countersignStatusLabel(el.status)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 审批历史 */}
       <div className="card p-5">
