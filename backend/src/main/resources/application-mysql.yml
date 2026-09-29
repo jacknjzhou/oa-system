@@ -8,17 +8,24 @@ spring:
     console:
       enabled: false
   jpa:
+    # DDL 交由 Flyway 版本化（V1__business_schema.sql），Hibernate 不再自动改表
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     show-sql: false
     properties:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.MySQLDialect
-    defer-datasource-initialization: true
+    # false：避免 Hibernate 6.4/Boot 3.2 下 flyway↔entityManagerFactory 的 dependsOn 环（见 application.yml 说明）
+    defer-datasource-initialization: false
   sql:
     init:
-      mode: always
+      # 种子数据由 Flyway V3__seed.sql 负责（原 data.sql 已移除），禁用脚本初始化
+      mode: never
+  flyway:
+    enabled: true
+    # 已有库（无 flyway_schema_history）以基线方式接管，不重放 V1
+    baseline-on-missing-version: true
 
 logging:
   level:

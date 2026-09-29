@@ -7,7 +7,8 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.5</version>
+        <!-- 3.2.10：修复 3.2.5 中 Hibernate 6.4 与 Flyway 的 Bean 循环依赖（3.2.6 起修复）；同时获得 Spring Security 安全补丁 -->
+        <version>3.2.10</version>
         <relativePath/>
     </parent>
 
@@ -38,6 +39,21 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <!-- Actuator：健康检查端点（compose healthcheck 依赖 /actuator/health） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Flyway DDL 版本化（版本由 Spring Boot BOM 管理）；MySQL 支持需独立模块 -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
         </dependency>
 
         <dependency>

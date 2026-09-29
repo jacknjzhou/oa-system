@@ -15,6 +15,7 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -60,6 +61,8 @@ public class JwtTokenProvider {
                 .subject(String.valueOf(userId))
                 .claim("username", username)
                 .claim("type", "refresh")
+                // jti 保证每次签发都是独立 token（同秒内轮换不会生成相同字符串）
+                .id(UUID.randomUUID().toString())
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(key, Jwts.SIG.HS256)
@@ -68,6 +71,10 @@ public class JwtTokenProvider {
 
     public long getAccessTokenExpiration() {
         return accessTokenExpiration;
+    }
+
+    public long getRefreshTokenExpiration() {
+        return refreshTokenExpiration;
     }
 
     public boolean validateToken(String token) {

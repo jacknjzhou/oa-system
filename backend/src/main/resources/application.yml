@@ -21,26 +21,40 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.H2Dialect
-    defer-datasource-initialization: true
+    # 必须为 false：true 时 Boot 把 EntityManagerFactory 也登记为"数据库初始化器"，
+    # 与 flyway 互为 dependsOn 形成环（Hibernate 6.4 + Boot 3.2 组合下启动即失败）。
+    defer-datasource-initialization: false
   sql:
     init:
-      mode: always
+      # 不再使用 data.sql 脚本播种：种子数据已版本化为 Flyway V3__seed.sql，
+      # 顺序由 Flyway 保证（V1 建表 → V2 表 → V3 种子），两档 profile 行为一致。
+      mode: never
+  flyway:
+    # 统一启用：H2 开发/测试与 MySQL 生产走同一套迁移（V1 业务表 / V2 refresh_token / V3 种子）
+    enabled: ${FLYWAY_ENABLED:true}
 
 flowable:
-  # 启动时自动创建/更新引擎表结构
+  # 启动时自动创建/更新引擎表结构（Flowable 自管 ACT_*/FLW_* 表）
   database-schema-update: true
-  # 审批流全部为同步串行，无需异步执行器
-  async-executor-activate: false
+  # 启用 Job 执行器：BPMN 定时器/异步续流节点生效
+  async-executor-activate: true
   # 自动部署 classpath:/processes/ 下的 BPMN 文件
   process-definition-location-prefix: classpath*:/processes/
   process-definition-location-suffixes:
     - "**.bpmn20.xml"
   history-level: audit
 
+# JWT 密钥必须经环境变量注入（生产）；此处默认值仅供本地开发，
+# 历史上曾硬编码进 Git 的密钥已作废，请勿复用。
 jwt:
-  secret: ZmQ0YjVkNzVmYzQ3ZGE3MmY3YjRkM2Q1YzNjYzRlZjQ4YjRkM2Q1YzNjYzRlZjQ4YjRkM2Q1YzNjYzRlZjQ=
-  access-token-expiration: 1800000      # 30 minutes (ms)
-  refresh-token-expiration: 604800000   # 7 days (ms)
+  secret: ${JWT_SECRET:dev-only-insecure-secret-please-override-0123456789abcdef}
+  access-token-expiration: ${JWT_ACCESS_TTL:1800000}        # 30 minutes (ms)
+  refresh-token-expiration: ${JWT_REFRESH_TTL:604800000}    # 7 days (ms)
+
+# 生产加固：CORS 白名单（逗号分隔），生产在 compose 注入明确域名
+oa:
+  cors:
+    allowed-origins: ${OA_CORS_ORIGINS:http://localhost:5173,http://localhost:3000,http://localhost}
 
 logging:
   level:

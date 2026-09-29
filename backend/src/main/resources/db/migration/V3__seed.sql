@@ -1,8 +1,8 @@
 -- =====================================================================
--- 初始化数据：组织 / 角色 / 用户 / 用户角色关联
--- 幂等写法：MySQL 8 与 H2(MySQL 模式) 均支持 INSERT ... SELECT ... FROM DUAL WHERE NOT EXISTS
+-- V3 播种数据：组织 / 角色 / 用户 / 用户角色关联（从 data.sql 迁入 Flyway，保证先于业务使用、先于/独立于 Hibernate DDL）
+-- 幂等写法（MySQL 8 与 H2 均支持）： INSERT ... SELECT ... FROM DUAL WHERE NOT EXISTS
 -- 密码均使用 BCrypt 编码（Spring Security BCryptPasswordEncoder 可校验 $2a$/$2b$ 前缀）
--- 流程模板元数据由 ProcessTemplateSeeder 在应用启动时按需补种
+-- 流程模板元数据仍由 ProcessTemplateSeeder 在应用启动时按需补种（带 Java 侧幂等判断）
 -- =====================================================================
 
 -- 组织架构：技术部

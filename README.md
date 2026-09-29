@@ -100,6 +100,42 @@ cd backend && mvn spring-boot:run
 cd frontend && npm install && npm run dev
 ```
 
+## 生产加固说明
+
+### 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `JWT_SECRET` | 开发默认值（已轮换） | JWT 签名密钥，≥32 字节；**生产必须通过 `.env` 覆盖**（docker compose 自动加载项目目录下 `.env`，已 gitignore）。旧仓库历史里出现过硬编码密钥，应视为已泄露，生产一律换新 |
+| `JWT_ACCESS_TTL` | `1800000`（毫秒） | 访问令牌有效期，默认 30 分钟 |
+| `JWT_REFRESH_TTL` | `604800000`（毫秒） | 刷新令牌有效期，默认 7 天 |
+| `OA_CORS_ORIGINS` | 本地开发端口 | CORS 白名单，逗号分隔；生产填实际前端域名，如 `https://oa.example.com` |
+| `FLYWAY_ENABLED` | `true` | 是否启用 Flyway（默认两档 profile 均启用，统一建表/播种路径） |
+
+### DDL 版本化（Flyway）
+
+- 业务表结构由 `backend/src/main/resources/db/migration/` 下的 Flyway 迁移管理：`V1__business_schema.sql`（9 张业务表）/ `V2__refresh_token.sql` / `V3__seed.sql`（admin/manager/employee 演示账号）；**新增表/改列必须新增迁移文件，禁止修改已发布迁移**
+- **两档 profile 统一启用 Flyway**（H2 开发/测试 + MySQL 生产走同一条 DDL 路径）；`spring.sql.init.mode: never`——原 `data.sql` 播种已版本化为 `V3__seed.sql`（`WHERE NOT EXISTS` 幂等），不再有脚本/建表顺序问题
+- `mysql` profile：`ddl-auto: none`，建表完全交给 Flyway；`baseline-on-missing-version: true` 使**已有旧库**首次升级时自动打基线（保留存量数据，V1 视为已应用，直接执行 V2/V3）
+- 本地 H2（默认 profile）：`ddl-auto: update` 保留（实体漂移时自动补齐，仅内存库无副作用）
+- 配置注意：`spring.jpa.defer-datasource-initialization` 必须为 `false`——为 `true` 时 Boot 会把 `EntityManagerFactory` 登记为"数据库初始化器"，与 `flyway` 互为 `dependsOn` 形成环，Hibernate 6.4 + Boot 3.2 组合下启动即失败（有 `FlywayBootstrapTest` 回归钉住）
+- 本地开发注意：`mvn` 不会删除 `target/classes` 里已删资源的陈旧副本，改动资源文件后建议 `mvn clean` 一次
+
+### Refresh Token 家族轮换
+
+- 登录时创建 token 家族（family）；每次 refresh **作废旧 token、签发新 token**（数据库仅存 SHA-256 哈希，不落明文）
+- **已作废的 token 再次出现（疑似被盗重放）→ 吊销整个家族**，之后该会话所有 token 一律 401，重新登录即可恢复
+- 已知局限：logout 黑名单是**进程内** Map，重启丢失、多实例不共享（生产多实例部署需换 Redis；当前单实例可接受）
+
+### 生产部署检查清单
+
+- [ ] `.env` 中设置随机 `JWT_SECRET`（`openssl rand -hex 32`）
+- [ ] `.env` 中设置实际 `OA_CORS_ORIGINS`
+- [ ] 修改 `docker-compose.yml` 中 MySQL 密码（当前 `oa123456` 仅开发用）
+- [ ] 前端经 HTTPS 反代（nginx/网关）暴露，禁止直连 8080
+- [ ] 首次升级旧库：直接 `docker compose up -d --build` 即可（自动基线，数据保留）；全新部署无需任何额外操作
+- [ ] 如后续多实例部署：logout 黑名单迁移至 Redis（当前为进程内）
+
 ## License
 
 MIT

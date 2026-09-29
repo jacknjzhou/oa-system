@@ -18,6 +18,9 @@ build/
 # Node.js / Frontend
 node_modules/
 dist/
+
+# 本地环境覆盖（docker compose 自动加载；含 JWT_SECRET 等敏感项）
+.env
 dist-ssr/
 *.local
 .vite/
@@ -32,3 +35,6 @@ docker/data/
 
 # TRAE agent internal
 .trae/
+
+# data.sql 已版本化为 Flyway V3__seed.sql；忽略防止网盘同步客户端复活该文件
+backend/src/main/resources/data.sql
