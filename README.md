@@ -1,165 +1,141 @@
 # OA 办公系统
 
-企业级 OA 办公自动化系统设计方案，包含架构设计、数据库 DDL、前端原型、部署架构和安全设计。
-
-## 文档清单
-
-| 文件                           | 内容                            |
-| ---------------------------- | ----------------------------- |
-| `oa_design_doc.html`         | 整体架构、工作流引擎、ER 关系、API 设计、审批状态机 |
-| `oa_ddl.html`                | 12 张表完整 DDL（字段、索引、约束、外键策略）    |
-| `oa_frontend_prototype.html` | 前端原型：待办列表、审批表单、流程跟踪           |
-| `oa_deployment.html`         | K8s 集群拓扑、CI/CD 流水线、监控可观测性     |
-| `oa_security.html`           | JWT 鉴权流、RBAC 权限矩阵、安全防护清单      |
+企业级 OA 审批系统（模块化单体）：Flowable 流程引擎 + Spring Boot 3 + React 18。
+对照 `docs/zhidieyun_oa_requirements.md` 实现：审批核心闭环、审批设置、考勤与假期、系统管理、整合。
 
 ## 技术栈
 
-- **后端**: Java 21 + Spring Boot 3 + Spring Cloud Gateway + Flowable
+- **后端**: Java 21 + Spring Boot 3.2 + Flowable 7.0（BPMN 引擎）+ Spring Security（JWT + Refresh Token 家族）+ Flyway（H2/MySQL 双兼容）
+- **前端**: React 18 + Vite 5 + TypeScript + Tailwind + bpmn-js（流程设计器）
+- **数据库**: MySQL 8.0（compose 部署）/ H2 内存库（本地开发、测试），DDL 由 Flyway 迁移统一管理
+- **部署**: Docker Compose（backend + frontend + MySQL），nginx 托管前端静态资源
 
-- **前端**: React / Vue + TypeScript
+## 文档
 
-- **数据库**: MySQL 8.0 + Redis + ElasticSearch
+| 文件 | 内容 |
+| --- | --- |
+| `docs/zhidieyun_oa_requirements.md` | 织蝶云功能规格（5 模块 30+ 功能点，本系统对照实现的依据） |
+| `docs/oa_solution_architecture.md` | 架构分析、模块完成度评估、生产化加固记录 |
+| `docs/superpowers/plans/2026-10-04-zhidieyun-gap-implementation.md` | 补齐实现计划（P1~P5）与决策记录 |
 
-- **消息队列**: Kafka
+## 功能全景
 
-- **容器编排**: Kubernetes + Istio
+### 审批核心（P1）
+- **四态审批**：通过（可驳回首节点/指定节点）/ 拒绝（整单终止）/ 转办 / 催办（可重复，留痕通知）；实例支持草稿（`DRAFT`）与撤回（运行中/已拒绝均可）
+- **抄送**：发起选抄送人 + 流程内置 `cc` serviceTask；「抄送给我」只读列表
+- **审批日志时间线**：实例全部审批记录升序展示；审批表单「常用意见」快捷下拉
 
-- **CI/CD**: GitLab CI + ArgoCD + Harbor
+### 审批设置（P2）
+- **审批类型**（`approval_type`）：15 类预置（请假/报销/出差/采购/加班/外出/补卡/用章/用车/合同/付款/预支/转正/招聘/离职），可增删改、屏蔽；code 稳定键关联模板
+- **动态表单**：模板 `formConfig` 驱动，19 类控件；三栏式表单设计器（字段库/字段列表/属性面板）
+- **可视化流程设计器**：角色/用户/发起人主管/发起人 × 单签/会签/并签 拖排成链，前端生成 BPMN；支持高级模式贴 XML
+- **字段级权限**：发起/每个审批节点独立配置 可编辑/只读/隐藏；**审批预览**（formConfig 只读渲染）
+- **模板 × 角色 功能权限**（`approval_permission`）：申请/查看/管理/编辑 四权限项勾选
+- **模板管理**：草稿/发布/停用生命周期；发布即部署引擎（`ProcessDefinitionDeployer` 启动幂等补部署）；存量实例按旧版本跑完
 
-- **监控**: Prometheus + Grafana + Loki + Jaeger
+### 考勤与假期（P3）
+- **考勤打卡**（`check_record`）：上下班打卡（手动/扫码）、今日工时、月度统计；CSV 导出；**打印视图**（`/print`，window.print）
+- **假期三账本**（`leave_type`/`leave_balance`/`leave_transaction`）：6 类假期（年假/病假/事假/婚假/陪产假/特殊假）；定量额度 = 授予 − 已用 − 冻结；全部流水留痕；CSV 导出
+- **请假联动**：发起请假冻结额度（余额不足 400 拦截）→ 审批通过转已用 → 拒绝/撤回释放；幂等（按 实例单号 + 动作标记 防重复记账）
 
-## 架构概览
+### 系统（P4）
+- **员工管理**：启用/禁用（禁用即 403 登录拦截）/软删除进回收站/恢复；自我保护（不能删自己）；职级内联选择
+- **职级 + 职称**（`job_level`/`job_title`）：4 职级 + 7 职称预置，可增删、屏蔽
+- **权组 + 权限清单**（`permission`/`permission_group`）：28 项内置权限（审批/考勤/假期/公文/印章/合同/费用/采购/人事/系统 十分组）；系统管理员/普通组；**登录响应携带权限码集合**，前端按码门控页面与导航（ADMIN 角色直通）
+- **系统设置**：企业信息（单行，抬头/信用代码等）/ 登录日志（成功与失败均记录：IP/UA/原因）/ 关于
 
-五层分层架构：接入层 → 网关层 → 应用服务层 → 数据存储层 → 基础设施层
+### 整合（P5）
+- **审批主页**（`/`）：欢迎区（带企业名称）+ 15 类申请卡片（点击直达发起抽屉）+ 四 Tab 概览（待我审批/我的申请/我已审批/抄送给我，实时计数）
+- 导出打印：考勤/假期 CSV（BOM，Excel 中文兼容）；考勤打印视图
 
-6 大微服务：用户与组织、工作流引擎、公文管理、审批管理、日程与任务、消息通知
+## 流程引擎（Flowable）要点
 
-## 流程引擎（Flowable）
+- **双源架构**：Flowable 引擎表 = 运行时事实源；自有表存业务快照，每次引擎动作后 `syncInstanceAfterAction()` 收敛
+- **角色即候选组**：BPMN `candidateGroups` 写角色 code；待办 = 指派人 ∪ 所属角色候选
+- **发起人主管**：`sys_user.supervisor_id`；BPMN `candidateUsers=${supervisorUsername}`，`assignSupervisorDelegate` 开始时解析（无主管回退发起人）
+- **会签/并签**：多实例节点 + `flowGroups_<nodeId>` 角色组变量注入；报销金额 > 10000 触发会签（任一拒绝即整单驳回），详情返回 `countersigns[]` 进度
+- **模板 XML 更新即部署新版本**，存量实例按旧版本跑到结束（Flowable 语义）
 
-- **双源架构**：Flowable 引擎表是流程运行时事实源（活动节点、多实例状态），自有表（`process_instance`/`process_node`/`approval_record`）存业务快照；每次引擎动作后 `syncInstanceAfterAction()` 收敛两侧
-- **角色即候选组**：BPMN `candidateGroups` 写角色 code，待办 = 指派人 ∪ 所属角色候选
-- **会签（多实例并行）**：报销流程金额 > 10000 时进入会签节点（`FINANCE`+`MANAGER` 并行，`completionCondition` 要求全部完成，任一拒绝即驳回流程）；`≤ 10000` 直走部门经理→完成，不受影响
-- **会签进度**：流程详情接口返回 `countersigns[]`（节点级 `total/completed/rejected/pending` + 每元素 `groupCode/status/assignee`）；元素变量存于多实例循环 execution 作用域，由服务层 join Flowable 引擎表（`ACT_RU_*`/`ACT_HI_*`，注意 MySQL 表名大小写敏感）取回
-- **审批四态**：通过（同意）/ 驳回（可指回目标节点，不指则整单驳回结束）/ 拒绝（终止流程，发起人可重新发起）/ 转办（转给他人代办，留痕）。实例增加 `DRAFT` 草稿态（先存草稿、后提交，提交前不产生待办）
-- **抄送**：发起时选抄送人 + 流程内置 `cc` serviceTask（`${ccDelegate}`，完成时触发）；`cc_record` 表按（实例×人）去重，抄送人收到 CC 类通知；「抄送给我」页只读查看（`GET /api/process-instances/cc`）
-- **催办/撤回**：发起人对运行中实例可重复催办（`POST /api/tasks/{id}/remind`，绕过通知去重，不产生审批记录）；可撤回（`POST /api/process-instances/{id}/withdraw`，运行中/已拒绝均可，引擎实例删除 + 审批记录 CANCEL 留痕）
-- **审批日志**：`GET /api/process-instances/{id}/logs` 返回该实例全部审批记录时间线（升序，含转办/拒绝/撤回）；审批表单提供「常用意见」下拉快捷填充
-- **演示账号**（V3/V4 播种）：`admin/admin123`（含总经理与系统管理）、`manager/manager123`、`employee/employee123`、`finance/finance123`
-- 模板 XML 修改后经「流程模板」页面更新并部署新版本，**存量流程实例继续按旧版本跑到结束**（Flowable 语义）
+## 演示账号（V3/V4 播种）
 
-## 审批设置（审批管理/审批类型/模板/表单/流程）
+| 账号 | 密码 | 角色 |
+| --- | --- | --- |
+| `admin` | `admin123` | ADMIN（总经理 + 系统管理），全部管理页面 |
+| `manager` | `manager123` | MANAGER（部门经理），审批/员工查看 |
+| `employee` | `employee123` | EMPLOYEE，发起/审批（普通组权限） |
+| `finance` | `finance123` | FINANCE，审批 |
 
-- **审批类型**（`approval_type` 表）：code 稳定键，关联模板；发起页按类型卡片分组；预置 15 类系统审批（请假/报销/出差/采购/加班/外出/补卡/用章/用车/合同/付款/预支/转正/招聘/离职 + 公文），启动 seeder 幂等补种；`business_type` 以 code 字符串落库（V10 字符串化，支持动态类型）
-- **动态表单**：模板 `formConfig` 驱动，19 类控件（单行/多行/数字/金额/日期/日期段/单选/多选/评分/附件/人员/省市等）；「表单配置」页三栏式表单设计器（字段库/字段列表/属性面板）；发起页、审批页、预览均按 formConfig 动态渲染
-- **可视化流程设计器**：模板「流程」页签——节点库（角色/用户/发起人主管/发起人 × 单签/会签/并签）拖排成链，前端生成 BPMN XML 随模板保存；`flowSpec`（JSON）与 `bpmnXml` 同存，模板无流程时 `flowReady=false`（可发布但不可发起，发起报 400）。也支持切「高级模式」直接贴 BPMN XML
-- **发起人主管**：`sys_user.supervisor_id`（用户编辑页可配）；BPMN 用 `candidateUsers=${supervisorUsername}`，`assignSupervisorDelegate` 在流程开始解析（无主管时回退发起人本人）；`launchEngine` 注入 `initiatorId`/`initiatorUsername` 变量，会签/并签节点注入 `flowGroups_<nodeId>` 角色组变量（Flowable JUEL 无法创建列表字面量）
-- **表单操作权限（字段级）**：流程设计器逐字段设置 可编辑/只读/隐藏——发起节点（默认全可编辑）与每个审批节点（默认全只读）独立配置，存于 `flowSpec`；发起页/审批页按当前节点生效（隐藏字段不渲染、不校验）
-- **审批预览**：模板列表「预览」——按 formConfig 只读渲染（必填字段带 *）
-- **审批功能权限**（`approval_permission` 表，V14）：模板 × 角色 × 权限项（申请/查看/管理/编辑），模板列表「权限」弹窗勾选保存（`GET/PUT /api/process-definitions/{id}/permissions`）；功能权限为管理端约束，运行时鉴权见下方生产 TODO
-- **内置模板**：报销（会签/驳回/抄送全特性）+ 请假 + 采购（表单+BPMN+流程规格完整，直接可发起）；seeder 建的模板由 `ProcessDefinitionDeployer` 启动时幂等补部署进引擎
-- **生产 TODO**：功能权限（start/view/manage）尚未在发起/查看接口做运行时拦截（当前为演示信任模型）；审批详情/日志接口未做归属校验
+> 权限码由权组聚合随登录下发（普通组 = 基础 13 项；系统管理员 = 全部 28 项）。
+> 旧会话 localStorage 中的用户信息无 `permissions` 字段，重新登录即可生效。
 
 ## 容器化开发与部署
 
 ### 前置条件
 
-- Docker Desktop / Docker Engine ≥ 24，含 Compose v2（`docker compose` 子命令）
-
-- 后端与前端均为多阶段构建（Maven → JRE、node → nginx），编译打包全部在容器内完成，无需本地 JDK/Maven/Node 环境
+Docker + Docker Compose v2。
 
 ### 一键启动
 
 ```bash
 # 构建镜像并后台启动全部服务（后端 jar 在容器内编译，无需本地 Maven）
 docker compose up -d --build
+
+# 等待就绪（健康检查：MySQL 5.7/8.x、backend /actuator/health、frontend /）
+docker compose ps
 ```
 
-启动完成后：
-
-- 前端页面：<http://localhost>
-
-- 后端健康检查：<http://localhost:8080/actuator/health>
-
-- 前端容器内 nginx 将 `/api/` 反向代理到后端 8080 端口
+前端 http://localhost:8081 ，后端 API http://localhost:8080/api 。
 
 ### 常用运维命令
 
 ```bash
-# 查看服务状态
-docker compose ps
-
-# 查看日志（实时跟踪）
-docker compose logs -f backend
-docker compose logs -f frontend
-
-# 进入容器排查
-docker compose exec backend sh
-docker compose exec frontend sh
-
-# 重启单个服务
-docker compose restart backend
-
-# 代码变更后重建并启动单个服务
-docker compose up -d --build backend
-
-# 停止并移除容器（保留镜像）
-docker compose down
-
-# 停止并移除容器 + 镜像（彻底清理）
-docker compose down --rmi all
-
-# 查看/清理镜像
-docker compose images
-docker image prune -f
+docker compose ps                          # 查看服务状态
+docker compose logs -f backend             # 查看日志（实时跟踪）
+docker compose exec mysql mysql --user=root --password=root123456 -e "SELECT 1"   # 进入 MySQL
+docker compose up -d --force-recreate backend   # 代码变更后重建后端
+docker compose down                        # 停止并移除容器（保留数据卷）
+docker compose down -v                     # 彻底清理（含 MySQL 数据卷，慎用）
 ```
 
 ### 本地开发（非容器化）
 
-后端与前端可分别本地起服务调试，配合容器中的另一端使用：
-
 ```bash
-# 后端：默认 8080 端口，H2 内存库
+# 后端：8080 端口，H2 内存库（无需 MySQL；Flyway 建表 + seeder 播种）
 cd backend && mvn spring-boot:run
 
-# 前端：Vite 开发服务器，热更新
+# 前端：Vite 开发服务器（/api 代理到 8080）
 cd frontend && npm install && npm run dev
 ```
 
 ## 生产加固说明
 
-### 环境变量
+### 环境变量（`.env`，已 gitignore）
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `JWT_SECRET` | 开发默认值（已轮换） | JWT 签名密钥，≥32 字节；**生产必须通过 `.env` 覆盖**（docker compose 自动加载项目目录下 `.env`，已 gitignore）。旧仓库历史里出现过硬编码密钥，应视为已泄露，生产一律换新 |
-| `JWT_ACCESS_TTL` | `1800000`（毫秒） | 访问令牌有效期，默认 30 分钟 |
-| `JWT_REFRESH_TTL` | `604800000`（毫秒） | 刷新令牌有效期，默认 7 天 |
-| `OA_CORS_ORIGINS` | 本地开发端口 | CORS 白名单，逗号分隔；生产填实际前端域名，如 `https://oa.example.com` |
-| `FLYWAY_ENABLED` | `true` | 是否启用 Flyway（默认两档 profile 均启用，统一建表/播种路径） |
+`JWT_SECRET`（≥32 字符）、`JWT_ACCESS_EXPIRE_MS`、`JWT_REFRESH_EXPIRE_MS`、`CORS_ORIGINS`、
+`MYSQL_HOST/PORT/USER/PASSWORD/DB`。全部可经环境变量覆盖，仓库不落地密钥。
 
 ### DDL 版本化（Flyway）
 
-- 业务表结构由 `backend/src/main/resources/db/migration/` 下的 Flyway 迁移管理：`common/`（双库兼容：`V1` 业务表 9 张 / `V2` refresh_token / `V3` 演示账号 / `V6` 抄送记录 / `V8` 实例抄送名单）+ `h2/` 与 `mysql/` 方言目录（`V5` 审批四态 CHECK / `V7` 抄送通知类型——H2 用 `DROP CONSTRAINT`、MySQL 用 `DROP CHECK`）；`V4` 财务账号在 `common/`；**新增表/改列必须新增迁移文件，禁止修改已发布迁移**（CHECK 放宽/枚举新值需追加新迁移）
-- **两档 profile 统一启用 Flyway**（H2 开发/测试 + MySQL 生产走同一条 DDL 路径）；`spring.sql.init.mode: never`——原 `data.sql` 播种已版本化为 `V3__seed.sql`（`WHERE NOT EXISTS` 幂等），不再有脚本/建表顺序问题
-- `mysql` profile：`ddl-auto: none`，建表完全交给 Flyway；`baseline-on-missing-version: true` 使**已有旧库**首次升级时自动打基线（保留存量数据，V1 视为已应用，直接执行 V2/V3）
-- 本地 H2（默认 profile）：`ddl-auto: update` 保留（实体漂移时自动补齐，仅内存库无副作用）
-- 配置注意：`spring.jpa.defer-datasource-initialization` 必须为 `false`——为 `true` 时 Boot 会把 `EntityManagerFactory` 登记为"数据库初始化器"，与 `flyway` 互为 `dependsOn` 形成环，Hibernate 6.4 + Boot 3.2 组合下启动即失败（有 `FlywayBootstrapTest` 回归钉住）
-- 本地开发注意：`mvn` 不会删除 `target/classes` 里已删资源的陈旧副本，改动资源文件后建议 `mvn clean` 一次
+21 个迁移版本（V1~V21），`db/migration/common` 双库通用、`db/migration/{h2,mysql}` 供应商差异
+（CHECK 语法、NOT NULL 放宽）。H2 用 `ddl-auto: update`，MySQL 用 `ddl-auto: none`（以迁移为准）。
 
 ### Refresh Token 家族轮换
 
-- 登录时创建 token 家族（family）；每次 refresh **作废旧 token、签发新 token**（数据库仅存 SHA-256 哈希，不落明文）
-- **已作废的 token 再次出现（疑似被盗重放）→ 吊销整个家族**，之后该会话所有 token 一律 401，重新登录即可恢复
-- 已知局限：logout 黑名单是**进程内** Map，重启丢失、多实例不共享（生产多实例部署需换 Redis；当前单实例可接受）
+SHA-256 哈希落库 + `jti` 家族号；轮换时作废旧 token；**已作废 token 再现 = 窃听重放 → 整族吊销**。
 
-### 生产部署检查清单
+### 已知边界（生产 TODO）
 
-- [ ] `.env` 中设置随机 `JWT_SECRET`（`openssl rand -hex 32`）
-- [ ] `.env` 中设置实际 `OA_CORS_ORIGINS`
-- [ ] 修改 `docker-compose.yml` 中 MySQL 密码（当前 `oa123456` 仅开发用）
-- [ ] 前端经 HTTPS 反代（nginx/网关）暴露，禁止直连 8080
-- [ ] 首次升级旧库：直接 `docker compose up -d --build` 即可（自动基线，数据保留）；全新部署无需任何额外操作
-- [ ] 如后续多实例部署：logout 黑名单迁移至 Redis（当前为进程内）
+- 审批详情/日志接口未做实例归属校验（演示信任模型）
+- 功能权限（模板 start/view/manage）未做运行时拦截，仅管理端约束
+- 邮件通知仅站内（notify 表），无 SMTP 发送基建
+- 登录日志的 IP 取自 `remoteAddr`，反代场景需配置 `X-Forwarded-For` 解析
+
+## 测试
+
+- 后端：62 个集成测试（`mvn test`，H2），覆盖流程四态/会签/抄送/催办撤回/动态表单/流程设计器/
+  假期三账本联动/员工回收站/职级职称/权组权限/企业信息/登录日志/Flyway 引导
+- 前端：`npx tsc --noEmit` 类型检查
+- 容器 E2E：`/tmp/oa-p3-e2e.sh`（MySQL 全链路冒烟）
 
 ## License
 

@@ -745,7 +745,7 @@ public class ProcessService {
      */
     @Transactional
     public void applyLeaveLedger(ProcessInstance instance) {
-        if (!"LEAVE".equals(instance.getBusinessType())) {
+        if (!"LEAVE".equalsIgnoreCase(instance.getBusinessType())) {
             return;
         }
         String[] leave = parseLeaveRequest(instance);
