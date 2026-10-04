@@ -30,10 +30,16 @@ public class DefinitionDTO {
     /** DRAFT / PUBLISHED / DISABLED */
     private String status;
 
+    /** 流程是否已设计（bpmnXml 非空）；模板可“表单已发布、流程未设计”双态 */
+    private boolean flowReady;
+
     private String creatorName;
 
     private String publishedAt;
 
     /** BPMN 2.0 XML，仅在单查接口返回 */
     private String bpmnXml;
+
+    /** 可视化流程设计器规格 JSON，仅在单查接口返回 */
+    private String flowSpec;
 }

@@ -192,7 +192,8 @@ export default function StartProcess() {
             const template = templateFor(type)
             const fields = template ? parseFormConfig(template.formConfig).fields : []
             const preview = fields.map((f) => f.label || f.key).slice(0, 4).join('、')
-            const defOk = template !== null
+            const flowReady = template ? template.flowReady !== false : false
+            const defOk = template !== null && flowReady
             return (
               <button
                 key={type.id}
@@ -228,6 +229,11 @@ export default function StartProcess() {
                     分类：{type.category || '未分类'}
                     {template ? ` · ${template.name}` : ' · 流程未发布'}
                   </span>
+                  {!defOk && template && !flowReady && (
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+                      流程未设计
+                    </span>
+                  )}
                   {defOk && (
                     <span className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 opacity-0 transition-opacity group-hover:opacity-100 dark:text-primary-400">
                       发起申请

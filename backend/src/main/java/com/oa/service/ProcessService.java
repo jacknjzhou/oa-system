@@ -87,10 +87,12 @@ public class ProcessService {
 
     @Transactional
     public DefinitionDTO createDefinition(ProcessDefinitionRequest req) {
-        String processKey = bpmnXmlService.extractProcessKey(req.getBpmnXml());
-        if (!processKey.equals(req.getDefKey())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "BPMN process id [" + processKey + "] 与模板 key [" + req.getDefKey() + "] 不一致");
+        if (hasText(req.getBpmnXml())) {
+            String processKey = bpmnXmlService.extractProcessKey(req.getBpmnXml());
+            if (!processKey.equals(req.getDefKey())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "BPMN process id [" + processKey + "] 与模板 key [" + req.getDefKey() + "] 不一致");
+            }
         }
         if (!definitionRepository.findByDefKey(req.getDefKey()).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "模板 key 已存在: " + req.getDefKey());
@@ -104,30 +106,38 @@ public class ProcessService {
         def.setDescription(req.getDescription());
         def.setFormConfig(req.getFormConfig());
         def.setBpmnXml(req.getBpmnXml());
+        def.setFlowSpec(req.getFlowSpec());
         def.setStatus(ProcessDefinitionStatus.DRAFT);
         def.setCreator(creator);
         def.setVersion(0);
         def = definitionRepository.save(def);
 
-        def = deployAndSyncVersion(def);
+        if (hasText(req.getBpmnXml())) {
+            def = deployAndSyncVersion(def);
+        }
         return toDto(def, false);
     }
 
     @Transactional
     public DefinitionDTO updateDefinition(Long id, ProcessDefinitionRequest req) {
         ProcessDefinition def = loadDefinition(id);
-        String processKey = bpmnXmlService.extractProcessKey(req.getBpmnXml());
-        if (!processKey.equals(def.getDefKey())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "BPMN process id [" + processKey + "] 与模板 key [" + def.getDefKey() + "] 不一致，模板 key 不可修改");
+        if (hasText(req.getBpmnXml())) {
+            String processKey = bpmnXmlService.extractProcessKey(req.getBpmnXml());
+            if (!processKey.equals(def.getDefKey())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "BPMN process id [" + processKey + "] 与模板 key [" + def.getDefKey() + "] 不一致，模板 key 不可修改");
+            }
         }
         def.setName(req.getName());
         def.setCategory(req.getCategory());
         def.setDescription(req.getDescription());
         def.setFormConfig(req.getFormConfig());
-        boolean xmlChanged = !req.getBpmnXml().equals(def.getBpmnXml());
+        boolean xmlChanged = hasText(req.getBpmnXml())
+                ? !req.getBpmnXml().equals(def.getBpmnXml())
+                : hasText(def.getBpmnXml());
         def.setBpmnXml(req.getBpmnXml());
-        if (xmlChanged) {
+        def.setFlowSpec(req.getFlowSpec());
+        if (xmlChanged && hasText(req.getBpmnXml())) {
             def = deployAndSyncVersion(def);
         }
         def = definitionRepository.save(def);
@@ -233,7 +243,18 @@ public class ProcessService {
 
     /** 启动 Flowable 引擎实例、记录发起审批、同步当前节点与待办通知。 */
     private void launchEngine(ProcessInstance instance) {
+        if (!hasText(instance.getDef().getBpmnXml())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "模板 [" + instance.getDef().getName() + "] 尚未设计流程，无法发起");
+        }
         Map<String, Object> variables = parseVariables(instance.getBusinessData());
+        // 发起人上下文：供流程节点使用（主管解析 delegate / candidateUsers 表达式等）
+        if (instance.getInitiator() != null) {
+            variables.put("initiatorId", instance.getInitiator().getId());
+            variables.put("initiatorUsername", instance.getInitiator().getUsername());
+        }
+        // 流程设计器生成的会签/并签名单（flowSpec.nodes[].signMode != single 的节点）
+        injectFlowGroupVariables(instance.getDef().getFlowSpec(), variables);
         // 抄送名单：草稿提交时同样携带（若发起时选择了抄送人）
         if (instance.getCcUserIds() != null && !instance.getCcUserIds().isEmpty()) {
             variables.put("ccUserIds", java.util.List.copyOf(instance.getCcUserIds()));
@@ -713,10 +734,49 @@ public class ProcessService {
         dto.setCreatorName(def.getCreator() != null && def.getCreator().getRealName() != null
                 ? def.getCreator().getRealName() : (def.getCreator() != null ? def.getCreator().getUsername() : null));
         dto.setPublishedAt(def.getPublishedAt() != null ? def.getPublishedAt().format(TS) : null);
+        dto.setFlowReady(hasText(def.getBpmnXml()));
         if (withXml) {
             dto.setBpmnXml(def.getBpmnXml());
+            dto.setFlowSpec(def.getFlowSpec());
         }
         return dto;
+    }
+
+    private static boolean hasText(String s) {
+        return s != null && !s.isBlank();
+    }
+
+    /**
+     * 解析 flowSpec JSON，为会签/并签节点预置候选组名单变量（flowGroups_<nodeId>），
+     * 供生成 BPMN 中 multiInstance collection 引用。解析失败静默跳过（旧模板无 flowSpec）。
+     */
+    private void injectFlowGroupVariables(String flowSpec, Map<String, Object> variables) {
+        if (!hasText(flowSpec)) {
+            return;
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode root =
+                    new com.fasterxml.jackson.databind.ObjectMapper().readTree(flowSpec);
+            com.fasterxml.jackson.databind.JsonNode nodes = root.get("nodes");
+            if (nodes == null || !nodes.isArray()) {
+                return;
+            }
+            for (com.fasterxml.jackson.databind.JsonNode node : nodes) {
+                String signMode = node.path("signMode").asText("single");
+                if ("single".equals(signMode)) {
+                    continue;
+                }
+                com.fasterxml.jackson.databind.JsonNode roles = node.get("roles");
+                if (roles == null || !roles.isArray() || roles.isEmpty()) {
+                    continue;
+                }
+                List<String> list = new java.util.ArrayList<>();
+                roles.forEach(r -> list.add(r.asText()));
+                variables.put("flowGroups_" + node.path("id").asText(""), list);
+            }
+        } catch (Exception e) {
+            log.warn("flowSpec 解析失败，跳过会签名单变量注入: {}", e.getMessage());
+        }
     }
 
     /**

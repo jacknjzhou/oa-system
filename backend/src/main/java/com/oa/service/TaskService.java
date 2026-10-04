@@ -59,13 +59,19 @@ public class TaskService {
 
     // ==================== 查询 ====================
 
-    /** 我的待办：已分配给我 + 我的角色为候选组的任务。 */
+    /** 我的待办：已分配给我 + 我的角色为候选组 + 我为用户候选人的任务。 */
     @Transactional(readOnly = true)
     public List<TaskDTO> getMyTasks() {
         User current = authService.getCurrentUser();
         LinkedHashSet<Task> merged = new LinkedHashSet<>();
         merged.addAll(flowableTaskService.createTaskQuery()
                 .taskAssignee(current.getUsername())
+                .active()
+                .orderByTaskCreateTime().desc()
+                .list());
+        // 用户候选人（指定用户审批 / 发起人主管等）
+        merged.addAll(flowableTaskService.createTaskQuery()
+                .taskCandidateUser(current.getUsername())
                 .active()
                 .orderByTaskCreateTime().desc()
                 .list());
@@ -278,12 +284,17 @@ public class TaskService {
             }
             return task;
         }
-        Set<String> groups = flowableTaskService.getIdentityLinksForTask(task.getId()).stream()
+        List<IdentityLink> links = flowableTaskService.getIdentityLinksForTask(task.getId());
+        Set<String> groups = links.stream()
                 .map(IdentityLink::getGroupId)
                 .filter(g -> g != null && !g.isBlank())
                 .collect(Collectors.toSet());
-        boolean candidate = current.getRoleCodes().stream().anyMatch(groups::contains);
-        if (!candidate) {
+        // 用户候选人（指定用户 / 发起人主管等）与角色候选组任一命中即可
+        boolean userCandidate = links.stream()
+                .anyMatch(l -> "candidate".equals(l.getType())
+                        && current.getUsername().equals(l.getUserId()));
+        boolean roleCandidate = current.getRoleCodes().stream().anyMatch(groups::contains);
+        if (!userCandidate && !roleCandidate) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "无权操作该任务");
         }
         return task;

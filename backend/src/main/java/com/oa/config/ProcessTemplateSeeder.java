@@ -17,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 内置报销审批模板种子：Flowable 自动部署 classpath BPMN 后，
@@ -41,6 +43,36 @@ public class ProcessTemplateSeeder implements ApplicationRunner {
         healReimbursementForm(def);
         // 预置“报销”审批类型（幂等；覆盖旧库升级路径：模板在、类型缺）
         seedReimbursementType(def);
+        // 预置演示主管关系（“发起人主管”审批人解析演示）：幂等，已设置则不动
+        seedSupervisors();
+    }
+
+    private void seedSupervisors() {
+        User admin = userRepository.findByUsername("admin").orElse(null);
+        User manager = userRepository.findByUsername("manager").orElse(null);
+        User employee = userRepository.findByUsername("employee").orElse(null);
+        User finance = userRepository.findByUsername("finance").orElse(null);
+        boolean changed = false;
+        if (admin != null && manager != null && manager.getSupervisorId() == null) {
+            manager.setSupervisorId(admin.getId());
+            changed = true;
+        }
+        if (manager != null && employee != null && employee.getSupervisorId() == null) {
+            employee.setSupervisorId(manager.getId());
+            changed = true;
+        }
+        if (manager != null && finance != null && finance.getSupervisorId() == null) {
+            finance.setSupervisorId(manager.getId());
+            changed = true;
+        }
+        if (changed) {
+            List<User> dirty = new ArrayList<>();
+            if (manager != null && manager.getSupervisorId() != null) dirty.add(manager);
+            if (employee != null && employee.getSupervisorId() != null) dirty.add(employee);
+            if (finance != null && finance.getSupervisorId() != null) dirty.add(finance);
+            userRepository.saveAll(dirty);
+            log.info("已预置演示主管关系（manager→admin，employee/finance→manager）");
+        }
     }
 
     /**

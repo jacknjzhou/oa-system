@@ -123,7 +123,14 @@ export default function TemplateList() {
                       {template.category || '-'}
                     </td>
                     <td className="px-5 py-3.5">
-                      <StatusBadge status={template.status} />
+                      <div className="flex items-center gap-1.5">
+                        <StatusBadge status={template.status} />
+                        {template.flowReady === false && (
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+                            流程未设计
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-3.5 text-slate-500 dark:text-slate-400">
                       {formatDateTime(template.publishedAt)}

@@ -22,6 +22,9 @@ public class ProcessDefinitionRequest {
 
     private String formConfig;
 
-    @NotBlank(message = "BPMN XML不能为空")
+    /** BPMN XML（可空 = 流程未设计；发布后发起仍被后端拦截） */
     private String bpmnXml;
+
+    /** 可视化流程设计器规格 JSON（可空） */
+    private String flowSpec;
 }

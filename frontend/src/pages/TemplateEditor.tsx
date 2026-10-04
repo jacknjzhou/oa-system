@@ -3,12 +3,14 @@ import { useNavigate, useParams } from 'react-router-dom'
 import Modeler from 'bpmn-js/lib/Modeler'
 import 'bpmn-js/dist/assets/diagram-js.css'
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn-embedded.css'
-import type { FormField, Role, Template } from '../types'
+import type { FormField, FlowNodeSpec, Role, Template, UserSummary } from '../types'
 import { createTemplate, getTemplate, publishTemplate, updateTemplate } from '../api/template'
-import { getRoles } from '../api/user'
+import { getRoles, getUsers } from '../api/user'
 import { buildInitialBpmnXml, flowableModdleDescriptor, syncProcessId } from '../utils/bpmn'
+import { buildFlowBpmnXml } from '../utils/bpmnXml'
 import { useToast } from '../components/Toast'
 import TemplateFormConfig from '../components/TemplateFormConfig'
+import FlowDesigner from '../components/FlowDesigner'
 import { LoadingState } from '../components/EmptyState'
 
 interface TemplateEditorProps {
@@ -47,10 +49,14 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
   const [category, setCategory] = useState('')
   const [fields, setFields] = useState<FormField[]>([])
   const [roles, setRoles] = useState<Role[]>([])
+  const [users, setUsers] = useState<UserSummary[]>([])
+  const [flowNodes, setFlowNodes] = useState<FlowNodeSpec[]>([])
+  /** 流程来源：可视化设计生成 / 高级 bpmn-js 手绘 */
+  const [flowSource, setFlowSource] = useState<'visual' | 'bpmn'>('visual')
   const [loading, setLoading] = useState(mode === 'edit')
   const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
-  const [tab, setTab] = useState<'props' | 'form'>('props')
+  const [tab, setTab] = useState<'props' | 'form' | 'flow'>('form')
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null)
   const [panel, setPanel] = useState<PanelState | null>(null)
   const [xmlToImport, setXmlToImport] = useState<string | null>(
@@ -100,6 +106,16 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
           setFields([])
         }
         setXmlToImport(data.bpmnXml || buildInitialBpmnXml(data.defKey, data.name))
+        if (data.flowSpec) {
+          try {
+            const parsed = JSON.parse(data.flowSpec) as { nodes?: FlowNodeSpec[] }
+            if (Array.isArray(parsed.nodes) && parsed.nodes.length > 0) {
+              setFlowNodes(parsed.nodes)
+            }
+          } catch {
+            // flowSpec 损坏时回退高级模式
+          }
+        }
       })
       .catch((err) => {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : '模板加载失败')
@@ -112,12 +128,17 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
     }
   }, [mode, id])
 
-  // 加载角色列表（候选角色复选框）
+  // 加载角色与用户列表（bpmn-js 候选角色 / 可视化流程设计器）
   useEffect(() => {
     getRoles()
       .then(setRoles)
       .catch(() => {
         // 角色加载失败不阻塞设计器，仅候选角色不可选
+      })
+    getUsers()
+      .then(setUsers)
+      .catch(() => {
+        // 用户加载失败不阻塞设计器
       })
   }, [])
 
@@ -233,7 +254,13 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
     try {
       const { xml } = await modeler.saveXML({ format: true })
       // process id 必须等于 defKey（后端按 key 发起流程）
-      const finalXml = syncProcessId(xml || '', defKey.trim())
+      const modelerXml = syncProcessId(xml || '', defKey.trim())
+      const flowSpecJson = JSON.stringify({ nodes: flowNodes })
+      // 流程来源：可视化设计有节点 → 用生成 XML；否则用 bpmn-js 画布 XML
+      const finalXml =
+        flowSource === 'visual' && flowNodes.length > 0
+          ? buildFlowBpmnXml(defKey.trim(), name.trim(), { nodes: flowNodes })
+          : modelerXml
       const formConfigJson = JSON.stringify({
         fields: fields.map((f) => ({
           key: f.key.trim(),
@@ -251,6 +278,7 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
           category: category.trim(),
           formConfig: formConfigJson,
           bpmnXml: finalXml,
+          flowSpec: flowSpecJson,
         })
         if (publish) {
           await publishTemplate(created.id)
@@ -262,6 +290,7 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
           category: category.trim(),
           formConfig: formConfigJson,
           bpmnXml: finalXml,
+          flowSpec: flowSpecJson,
         })
         if (publish) {
           await publishTemplate(template.id)
@@ -366,6 +395,16 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
       <div className="flex min-h-0 flex-1">
         <div className="relative min-w-0 flex-1 bg-white dark:bg-slate-800">
           <div ref={containerRef} className="h-full w-full" />
+          {tab === 'flow' && flowSource === 'visual' && (
+            <div className="absolute inset-0 z-20 bg-white dark:bg-slate-800">
+              <FlowDesigner spec={flowNodes} onChange={setFlowNodes} roles={roles} users={users} />
+            </div>
+          )}
+          {tab === 'flow' && flowSource === 'bpmn' && (
+            <div className="pointer-events-none absolute left-3 top-3 z-20 rounded bg-slate-100 px-2.5 py-1 text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+              高级模式：以 bpmn-js 手绘内容为准
+            </div>
+          )}
           {(loading || loadError) && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90 dark:bg-slate-800/90">
               {loadError ? (
@@ -403,6 +442,17 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
             <button
               type="button"
               className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
+                tab === 'flow'
+                  ? 'border-b-2 border-primary-600 text-primary-600 dark:text-primary-400'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+              }`}
+              onClick={() => setTab('flow')}
+            >
+              流程设计
+            </button>
+            <button
+              type="button"
+              className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
                 tab === 'form'
                   ? 'border-b-2 border-primary-600 text-primary-600 dark:text-primary-400'
                   : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
@@ -413,8 +463,31 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
             </button>
           </div>
 
+
+
           <div className="flex-1 overflow-y-auto p-4">
-            {tab === 'form' ? (
+            {tab === 'flow' ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="form-label">流程来源</label>
+                  <select
+                    className="input"
+                    value={flowSource}
+                    onChange={(e) => setFlowSource(e.target.value as 'visual' | 'bpmn')}
+                  >
+                    <option value="visual">可视化设计（自动生成流程图）</option>
+                    <option value="bpmn">高级：bpmn-js 手绘</option>
+                  </select>
+                </div>
+                <p className="rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
+                  {flowSource === 'visual'
+                    ? flowNodes.length > 0
+                      ? `已设计 ${flowNodes.length} 个审批节点（在左侧画布区编辑），保存时将自动生成流程图。`
+                      : '尚未设计流程：模板可保存与发布，但无法发起流程实例。在左侧画布区添加审批节点。'
+                    : '保存时将使用 bpmn-js 画布中的手绘流程图。'}
+                </p>
+              </div>
+            ) : tab === 'form' ? (
               <TemplateFormConfig fields={fields} onChange={setFields} />
             ) : !panel ? (
               <div className="flex flex-col items-center justify-center px-4 py-16 text-center">

@@ -32,6 +32,8 @@ export interface UserSummary {
   realName: string
   position: string
   roles: string[]
+  /** 直属主管（“发起人主管”审批人解析用） */
+  supervisorId?: number | null
 }
 
 export interface Role {
@@ -52,8 +54,12 @@ export interface Template {
   category: string
   status: TemplateStatus
   formConfig: string
+  /** 流程是否已设计（bpmnXml 存在）；未设计不能发起 */
+  flowReady?: boolean
   /** 仅 GET /api/process-definitions/{id} 单查时返回 */
   bpmnXml?: string
+  /** 可视化流程设计 spec（JSON 字符串）；仅单查返回 */
+  flowSpec?: string | null
   publishedAt?: string | null
 }
 
@@ -62,14 +68,42 @@ export interface TemplateCreatePayload {
   name: string
   category: string
   formConfig: string
-  bpmnXml: string
+  /** 流程未设计时可为空（模板可发布但不能发起） */
+  bpmnXml?: string | null
+  /** 可视化流程设计 spec（JSON 字符串） */
+  flowSpec?: string | null
 }
 
 export interface TemplateUpdatePayload {
   name: string
   category: string
   formConfig: string
-  bpmnXml: string
+  bpmnXml?: string | null
+  flowSpec?: string | null
+}
+
+// ========== 可视化流程设计（P2-2）==========
+
+/** 审批人类型：指定角色 / 指定用户 / 发起人主管 / 发起人自己 */
+export type FlowApproverType = 'role' | 'user' | 'supervisor' | 'initiator'
+
+/** 签署模式：单签（一人通过）/ 会签（全部通过）/ 并签（任一人通过） */
+export type FlowSignMode = 'single' | 'countersign' | 'cosign'
+
+export interface FlowNodeSpec {
+  id: string
+  name: string
+  approverType: FlowApproverType
+  /** approverType=role 时的角色编码（会签/并签可多个） */
+  roles: string[]
+  /** approverType=user 时的用户 */
+  userId?: number | null
+  username?: string | null
+  signMode: FlowSignMode
+}
+
+export interface FlowSpec {
+  nodes: FlowNodeSpec[]
 }
 
 // ========== 表单配置 ==========

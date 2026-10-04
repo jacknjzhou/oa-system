@@ -22,7 +22,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(callSuper = true)
-@ToString(callSuper = true, exclude = {"creator", "formConfig", "bpmnXml"})
+@ToString(callSuper = true, exclude = {"creator", "formConfig", "bpmnXml", "flowSpec"})
 @Entity
 @Table(name = "process_definition")
 public class ProcessDefinition extends BaseEntity {
@@ -46,10 +46,15 @@ public class ProcessDefinition extends BaseEntity {
     @Column(name = "form_config", columnDefinition = "TEXT")
     private String formConfig;
 
-    /** BPMN 2.0 标准 XML（与 Flowable 部署保持同步） */
+    /** BPMN 2.0 标准 XML（与 Flowable 部署保持同步；空 = 流程未设计，模板可双态） */
     @Lob
-    @Column(name = "bpmn_xml", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "bpmn_xml", nullable = true, columnDefinition = "TEXT")
     private String bpmnXml;
+
+    /** 可视化流程设计器规格 JSON（FlowDesigner 状态） */
+    @Lob
+    @Column(name = "flow_spec", nullable = true, columnDefinition = "TEXT")
+    private String flowSpec;
 
     @Enumerated(EnumType.ORDINAL)
     @Column(name = "status", nullable = false)

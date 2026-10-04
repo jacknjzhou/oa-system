@@ -19,6 +19,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -119,8 +121,32 @@ public class NotificationService {
                 n.getReadAt() != null ? n.getReadAt().format(TS) : null);
     }
 
+    /** 任务的全部潜在处理人：已认领人 + 用户候选人 + 候选角色下的用户（去重）。 */
+    private List<User> collectHolders(Task task) {
+        LinkedHashSet<User> users = new LinkedHashSet<>();
+        List<IdentityLink> links = taskService.getIdentityLinksForTask(task.getId());
+        if (task.getAssignee() != null) {
+            userRepository.findByUsername(task.getAssignee()).ifPresent(users::add);
+        }
+        // 用户候选人（指定用户 / 发起人主管等）
+        for (IdentityLink link : links) {
+            if ("candidate".equals(link.getType()) && link.getUserId() != null && !link.getUserId().isBlank()) {
+                userRepository.findByUsername(link.getUserId()).ifPresent(users::add);
+            }
+        }
+        List<String> groupIds = links.stream()
+                .map(IdentityLink::getGroupId)
+                .filter(g -> g != null && !g.isBlank())
+                .distinct()
+                .toList();
+        for (String role : groupIds) {
+            users.addAll(userRepository.findByRolesRoleCode(role));
+        }
+        return new ArrayList<>(users);
+    }
+
     /**
-     * 通知一个 Flowable 任务的全部潜在处理人（已认领人 + 候选角色下的用户）。
+     * 通知一个 Flowable 任务的全部潜在处理人（已认领人 + 用户候选人 + 候选角色下的用户）。
      */
     @Transactional
     public void notifyTaskHolders(Task task, String title, String content) {
@@ -128,20 +154,8 @@ public class NotificationService {
             return;
         }
         String refId = task.getId();
-        if (task.getAssignee() != null) {
-            userRepository.findByUsername(task.getAssignee()).ifPresent(u ->
-                    notify(u, title, content, NotifyType.TASK, RefType.TASK, refId));
-            return;
-        }
-        List<String> groupIds = taskService.getIdentityLinksForTask(task.getId()).stream()
-                .map(IdentityLink::getGroupId)
-                .filter(g -> g != null && !g.isBlank())
-                .distinct()
-                .collect(Collectors.toList());
-        for (String role : groupIds) {
-            for (User u : userRepository.findByRolesRoleCode(role)) {
-                notify(u, title, content, NotifyType.TASK, RefType.TASK, refId);
-            }
+        for (User u : collectHolders(task)) {
+            notify(u, title, content, NotifyType.TASK, RefType.TASK, refId);
         }
     }
 
@@ -151,19 +165,7 @@ public class NotificationService {
         if (task == null) {
             return;
         }
-        List<User> recipients = new java.util.ArrayList<>();
-        if (task.getAssignee() != null) {
-            userRepository.findByUsername(task.getAssignee()).ifPresent(recipients::add);
-        } else {
-            List<String> groupIds = taskService.getIdentityLinksForTask(task.getId()).stream()
-                    .map(IdentityLink::getGroupId)
-                    .filter(g -> g != null && !g.isBlank())
-                    .distinct()
-                    .toList();
-            for (String role : groupIds) {
-                recipients.addAll(userRepository.findByRolesRoleCode(role));
-            }
-        }
+        List<User> recipients = collectHolders(task);
         for (User u : recipients) {
             Notification n = new Notification();
             n.setUser(u);

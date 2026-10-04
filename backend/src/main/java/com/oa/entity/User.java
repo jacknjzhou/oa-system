@@ -58,6 +58,10 @@ public class User extends BaseEntity {
     @Column(name = "position", length = 64)
     private String position;
 
+    /** 主管（流程设计器“发起人主管”审批人解析） */
+    @Column(name = "supervisor_id")
+    private Long supervisorId;
+
     @Enumerated(EnumType.ORDINAL)
     @Column(name = "status", nullable = false)
     private UserStatus status;
