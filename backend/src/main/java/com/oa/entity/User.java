@@ -69,6 +69,10 @@ public class User extends BaseEntity {
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
 
+    /** 软删除时间（回收站）；非空表示已删除。 */
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     @JsonIgnore
     @ManyToMany
     @JoinTable(

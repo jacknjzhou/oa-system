@@ -6,5 +6,7 @@ package com.oa.enums;
 public enum UserStatus {
     INACTIVE,
     ACTIVE,
-    LOCKED
+    LOCKED,
+    /** 已删除（回收站）：不可登录、不出现在常规列表。 */
+    DELETED
 }

@@ -11,11 +11,15 @@ import com.oa.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
+import com.oa.service.AuthService;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -35,11 +39,15 @@ public class UserController {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final AuthService authService;
 
     @GetMapping("/users")
-    public ApiResponse<List<Map<String, Object>>> listUsers() {
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public ApiResponse<List<Map<String, Object>>> listUsers(
+            @RequestParam(defaultValue = "false") boolean includeDeleted) {
         List<User> users = userRepository.findAll().stream()
-                .filter(u -> u.getStatus() == UserStatus.ACTIVE)
+                .filter(u -> u.getStatus() == UserStatus.DELETED ? includeDeleted
+                        : u.getStatus() == UserStatus.ACTIVE)
                 .toList();
         return ApiResponse.success(users.stream().map(u -> {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -50,6 +58,8 @@ public class UserController {
             m.put("email", u.getEmail());
             m.put("supervisorId", u.getSupervisorId());
             m.put("roles", u.getRoleCodes());
+            m.put("status", u.getStatus() != null ? u.getStatus().name() : null);
+            m.put("deletedAt", u.getDeletedAt());
             return m;
         }).toList());
     }
@@ -98,5 +108,70 @@ public class UserController {
         m.put("supervisorId", saved.getSupervisorId());
         m.put("roles", saved.getRoleCodes());
         return ApiResponse.success(m);
+    }
+
+    /** 禁用：不可登录、待办/通知不可见（重新启用即恢复）。 */
+    @PostMapping("/users/{id}/disable")
+    @Transactional
+    public ApiResponse<Map<String, Object>> disableUser(@PathVariable Long id) {
+        User user = requireUser(id);
+        user.setStatus(UserStatus.INACTIVE);
+        return ApiResponse.success(userView(userRepository.save(user)));
+    }
+
+    @PostMapping("/users/{id}/enable")
+    @Transactional
+    public ApiResponse<Map<String, Object>> enableUser(@PathVariable Long id) {
+        User user = requireUser(id);
+        if (user.getStatus() == UserStatus.DELETED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "已删除用户请先恢复");
+        }
+        user.setStatus(UserStatus.ACTIVE);
+        return ApiResponse.success(userView(userRepository.save(user)));
+    }
+
+    /** 删除（软删入回收站）：不可登录，可恢复。不能删除自己。 */
+    @DeleteMapping("/users/{id}")
+    @Transactional
+    public ApiResponse<Map<String, Object>> deleteUser(@PathVariable Long id) {
+        User current = authService.getCurrentUser();
+        if (current.getId().equals(id)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不能删除当前登录用户");
+        }
+        User user = requireUser(id);
+        if (user.getStatus() == UserStatus.DELETED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "用户已在回收站");
+        }
+        user.setStatus(UserStatus.DELETED);
+        user.setDeletedAt(java.time.LocalDateTime.now());
+        return ApiResponse.success(userView(userRepository.save(user)));
+    }
+
+    /** 从回收站恢复。 */
+    @PostMapping("/users/{id}/restore")
+    @Transactional
+    public ApiResponse<Map<String, Object>> restoreUser(@PathVariable Long id) {
+        User user = requireUser(id);
+        if (user.getStatus() != UserStatus.DELETED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "仅回收站中的用户可恢复");
+        }
+        user.setStatus(UserStatus.ACTIVE);
+        user.setDeletedAt(null);
+        return ApiResponse.success(userView(userRepository.save(user)));
+    }
+
+    private User requireUser(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在"));
+    }
+
+    private Map<String, Object> userView(User u) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", u.getId());
+        m.put("username", u.getUsername());
+        m.put("realName", u.getRealName());
+        m.put("status", u.getStatus() != null ? u.getStatus().name() : null);
+        m.put("deletedAt", u.getDeletedAt());
+        return m;
     }
 }
