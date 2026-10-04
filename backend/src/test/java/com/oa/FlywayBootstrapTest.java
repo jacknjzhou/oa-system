@@ -34,6 +34,19 @@ class FlywayBootstrapTest {
     }
 
     @Test
+    void v6_ccRecordHasBaseEntityColumns() {
+        // 回归：cc_record 必须含 BaseEntity 的 created_at/updated_at 列。
+        // 历史事故：V6 初版漏了 updated_at，H2 因 ddl-auto=update 自动补列而测试全绿，
+        // MySQL（ddl-auto=none）上线即 500（Unknown column），抄送把整个审批事务卷回。
+        for (String column : new String[]{"created_at", "updated_at"}) {
+            Long count = jdbc.queryForObject(
+                    "select count(*) from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME = 'CC_RECORD' and COLUMN_NAME = ?",
+                    Long.class, column.toUpperCase());
+            assertThat(count).as("cc_record.%s", column).isEqualTo(1L);
+        }
+    }
+
+    @Test
     void v5_widenedChecksAcceptDraftStatusAndDenyAction() {
         // V5 回归：放宽后的 CHECK 必须能容纳 DRAFT(4)/DENY(5)；
         // 若 V5 未应用（CHECK 仍是 0..3 / 0..4），下面的插入会直接抛约束异常。

@@ -2,6 +2,7 @@
 CREATE TABLE cc_record (
     id          BIGINT        NOT NULL AUTO_INCREMENT,
     created_at  DATETIME(6)   NULL,
+    updated_at  DATETIME(6)   NULL,
     instance_id BIGINT        NULL,
     node_key    VARCHAR(64)   NULL,
     user_id     BIGINT        NULL,
