@@ -192,6 +192,7 @@ public class TaskService {
             instance.setStatus(ProcessInstanceStatus.REJECTED);
             instance.setCompletedAt(LocalDateTime.now());
             instanceRepository.save(instance);
+            processService.applyLeaveLedger(instance);
             notificationService.notify(instance.getInitiator(), "流程被驳回",
                     "流程【" + instance.getTitle() + "】已被驳回。",
                     NotifyType.PROCESS, RefType.PROCESS_INSTANCE, String.valueOf(instance.getId()));
@@ -216,6 +217,7 @@ public class TaskService {
         instance.setStatus(ProcessInstanceStatus.REJECTED);
         instance.setCompletedAt(LocalDateTime.now());
         instanceRepository.save(instance);
+        processService.applyLeaveLedger(instance);
         notificationService.notify(instance.getInitiator(), "流程被拒绝",
                 "流程【" + instance.getTitle() + "】已被拒绝。",
                 NotifyType.PROCESS, RefType.PROCESS_INSTANCE, String.valueOf(instance.getId()));

@@ -128,6 +128,8 @@ public class LeaveService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "余额不足：" + type.getName() + " 可用 " + balance.available() + " 天，申请 " + days + " 天");
         }
+        // 已冻结的部分转已用；未冻结的（旧数据/直接调用）不动 frozen
+        balance.setFrozen(Math.max(0, nvl(balance.getFrozen()) - days));
         balance.setUsed(nvl(balance.getUsed()) + days);
         leaveBalanceRepository.save(balance);
         recordTransaction(userId, type, -days, reason, ref);
@@ -170,6 +172,80 @@ public class LeaveService {
                 .stream()
                 .anyMatch(t -> t.getId() > consumeTxnId && t.getDelta() > 0
                         && ref.equals(t.getRefInstanceNo()));
+    }
+
+    /** 表单里的显示名（如“年假”）或 code（如 ANNUAL）都解析为 code；未知返回 null。 */
+    public String resolveCode(String codeOrLabel) {
+        if (codeOrLabel == null || codeOrLabel.isBlank()) {
+            return null;
+        }
+        String v = codeOrLabel.trim();
+        LeaveType t = resolveType(v);
+        return t == null ? null : t.getCode();
+    }
+
+    /** 冻结（发起请假时）：frozen 增量，流水记 0 天 + 标记；不限额/未知类型跳过；余额不足 400。幂等（同 ref）。 */
+    @Transactional
+    public void freeze(Long userId, String codeOrLabel, int days, String ref) {
+        LeaveType type = resolveType(codeOrLabel);
+        if (type == null || "none".equals(type.getQuotaType()) || days <= 0) {
+            return;
+        }
+        if (hasMarker(userId, type.getId(), ref, "冻结")) {
+            return;
+        }
+        LeaveBalance balance = ensureBalance(userId, type);
+        if (balance.available() < days) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    type.getName() + "余额不足（可用 " + balance.available() + " 天，申请 " + days + " 天）");
+        }
+        balance.setFrozen(nvl(balance.getFrozen()) + days);
+        leaveBalanceRepository.save(balance);
+        recordTransaction(userId, type, 0, "冻结", ref);
+    }
+
+    /** 释放（驳回/拒绝/撤回时）：frozen 回滚，幂等（同 ref）。 */
+    @Transactional
+    public void release(Long userId, String codeOrLabel, int days, String ref) {
+        LeaveType type = resolveType(codeOrLabel);
+        if (type == null || days <= 0) {
+            return;
+        }
+        if (hasMarker(userId, type.getId(), ref, "释放")) {
+            return;
+        }
+        LeaveBalance balance = ensureBalance(userId, type);
+        if ("none".equals(type.getQuotaType())) {
+            balance.setFrozen(0);
+            leaveBalanceRepository.save(balance);
+            return;
+        }
+        balance.setFrozen(Math.max(0, nvl(balance.getFrozen()) - days));
+        leaveBalanceRepository.save(balance);
+        recordTransaction(userId, type, 0, "释放", ref);
+    }
+
+    private LeaveType resolveType(String codeOrLabel) {
+        if (codeOrLabel == null || codeOrLabel.isBlank()) {
+            return null;
+        }
+        String v = codeOrLabel.trim();
+        LeaveType exact = leaveTypeRepository.findByCode(v).orElse(null);
+        if (exact != null) {
+            return exact;
+        }
+        LeaveType upper = leaveTypeRepository.findByCode(v.toUpperCase()).orElse(null);
+        if (upper != null) {
+            return upper;
+        }
+        return leaveTypeRepository.findAll().stream()
+                .filter(t -> v.equals(t.getName()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private boolean hasMarker(Long userId, Long typeId, String ref, String marker) {
+        return leaveTransactionRepository.countByMarker(userId, typeId, ref, marker) > 0;
     }
 
     // ==================== 内部 ====================

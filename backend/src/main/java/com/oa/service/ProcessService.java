@@ -67,6 +67,7 @@ public class ProcessService {
     private final RoleRepository roleRepository;
     private final AuthService authService;
     private final NotificationService notificationService;
+    private final LeaveService leaveService;
     private final BpmnXmlService bpmnXmlService;
     private final ObjectMapper objectMapper;
     private final RepositoryService repositoryService;
@@ -203,7 +204,9 @@ public class ProcessService {
         instance.setDefVersion(def.getVersion());
         instance.setTitle(req.getTitle());
         instance.setInitiator(initiator);
-        instance.setBusinessType(req.getBusinessType() != null ? req.getBusinessType() : "REIMBURSEMENT");
+        instance.setBusinessType(req.getBusinessType() != null && !req.getBusinessType().isBlank()
+                ? req.getBusinessType()
+                : defaultBusinessType(def));
         instance.setBusinessData(req.getBusinessData());
         instance.setPriority(Priority.NORMAL);
 
@@ -224,6 +227,7 @@ public class ProcessService {
         instance = instanceRepository.save(instance);
 
         launchEngine(instance);
+        applyLeaveLedger(instance);
         return toInstanceDto(instance);
     }
 
@@ -243,6 +247,7 @@ public class ProcessService {
         instance = instanceRepository.save(instance);
 
         launchEngine(instance);
+        applyLeaveLedger(instance);
         return toInstanceDto(instance);
     }
 
@@ -451,6 +456,7 @@ public class ProcessService {
         instance.setStatus(ProcessInstanceStatus.CANCELLED);
         instance.setCompletedAt(LocalDateTime.now());
         instance = instanceRepository.save(instance);
+        applyLeaveLedger(instance);
 
         recordApproval(instance, null, instance.getCurrentNode(), instance.getCurrentNode(),
                 ApprovalAction.CANCEL, operator, "取消流程", instance.getCurrentNode(), null);
@@ -487,6 +493,7 @@ public class ProcessService {
         instance.setCurrentNode(null);
         instance.setCompletedAt(LocalDateTime.now());
         instance = instanceRepository.save(instance);
+        applyLeaveLedger(instance);
 
         recordApproval(instance, null, null, null,
                 ApprovalAction.CANCEL, operator, "撤回流程", null, null);
@@ -652,6 +659,7 @@ public class ProcessService {
         instance.setCompletedAt(LocalDateTime.now());
         instance.setCurrentNode("end");
         instanceRepository.save(instance);
+        applyLeaveLedger(instance);
         notificationService.notify(instance.getInitiator(), "流程已审批完成",
                 "流程【" + instance.getTitle() + "】已全部审批通过。",
                 NotifyType.PROCESS, RefType.PROCESS_INSTANCE, String.valueOf(instance.getId()));
@@ -713,6 +721,74 @@ public class ProcessService {
             return List.of();
         }
         return new java.util.ArrayList<>(runtimeService.getActiveActivityIds(instance.getFlowableInstanceId()));
+    }
+
+    /** 未显式指定业务类型时按模板类别推导（leave→LEAVE 等），缺省 REIMBURSEMENT。 */
+    private String defaultBusinessType(ProcessDefinition def) {
+        String category = def.getCategory();
+        if (category == null) {
+            return "REIMBURSEMENT";
+        }
+        return switch (category.toLowerCase()) {
+            case "leave" -> "LEAVE";
+            case "procurement" -> "PROCUREMENT";
+            case "finance", "expense", "reimbursement" -> "REIMBURSEMENT";
+            default -> category.toUpperCase();
+        };
+    }
+
+    /**
+     * 请假 ↔ 假期账本联动（AT-04）：
+     * LEAVE 类型实例按状态驱动三账本——
+     * RUNNING（发起/提交）冻结 → COMPLETED 扣减 → REJECTED/CANCELLED 释放。
+     * 各操作以 instance_no 为 ref 幂等，重复调用无副作用。
+     */
+    @Transactional
+    public void applyLeaveLedger(ProcessInstance instance) {
+        if (!"LEAVE".equals(instance.getBusinessType())) {
+            return;
+        }
+        String[] leave = parseLeaveRequest(instance);
+        if (leave == null || instance.getStatus() == null) {
+            return;
+        }
+        String code = leave[0];
+        int days = Integer.parseInt(leave[1]);
+        switch (instance.getStatus()) {
+            case RUNNING -> leaveService.freeze(instance.getInitiator().getId(), code, days, instance.getInstanceNo());
+            case COMPLETED -> leaveService.consume(instance.getInitiator().getId(), code, days,
+                    instance.getInstanceNo(), "请假审批通过");
+            case REJECTED, CANCELLED -> leaveService.release(instance.getInitiator().getId(), code, days, instance.getInstanceNo());
+            default -> { /* DRAFT 等不处理 */ }
+        }
+    }
+
+    /** 从业务数据解析假期类型与天数（兼容 code / 中文显示名）；解析失败返回 null（不阻断流程）。 */
+    private String[] parseLeaveRequest(ProcessInstance instance) {
+        if (instance.getBusinessData() == null || instance.getBusinessData().isBlank()) {
+            return null;
+        }
+        try {
+            Map<String, Object> data = objectMapper.readValue(instance.getBusinessData(), Map.class);
+            Object leaveType = data.get("leaveType");
+            Object days = data.get("days");
+            if (leaveType == null || days == null) {
+                return null;
+            }
+            String code = leaveService.resolveCode(String.valueOf(leaveType));
+            if (code == null) {
+                log.warn("请假实例 {} 的假期类型无法解析: {}", instance.getInstanceNo(), leaveType);
+                return null;
+            }
+            int d = new java.math.BigDecimal(String.valueOf(days)).intValue();
+            if (d <= 0) {
+                return null;
+            }
+            return new String[]{code, String.valueOf(d)};
+        } catch (Exception e) {
+            log.warn("请假实例 {} 业务数据解析失败: {}", instance.getInstanceNo(), e.getMessage());
+            return null;
+        }
     }
 
     private Map<String, Object> parseVariables(String businessData) {

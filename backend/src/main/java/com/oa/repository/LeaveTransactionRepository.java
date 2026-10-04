@@ -20,4 +20,10 @@ public interface LeaveTransactionRepository extends JpaRepository<LeaveTransacti
     Optional<LeaveTransaction> findConsumedByRef(@Param("userId") Long userId,
                                                   @Param("typeId") Long typeId,
                                                   @Param("ref") String ref);
+
+    /** 该单据是否已打过某标记流水（reason 精确匹配，如“冻结”/“释放”）。 */
+    @Query("select count(t) from LeaveTransaction t where t.userId = :userId "
+            + "and t.leaveTypeId = :typeId and t.refInstanceNo = :ref and t.reason = :marker")
+    long countByMarker(@Param("userId") Long userId, @Param("typeId") Long typeId,
+                       @Param("ref") String ref, @Param("marker") String marker);
 }

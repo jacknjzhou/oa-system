@@ -229,7 +229,7 @@ public class ProcessTemplateSeeder implements ApplicationRunner {
         def.setDescription("请假申请（年假/病假/事假等），部门经理审批");
         def.setFormConfig("""
                 {"fields":[
-                  {"key":"leaveType","label":"请假类型","type":"radio","required":true,"options":["年假","病假","事假","婚假","产假","其他"]},
+                  {"key":"leaveType","label":"请假类型","type":"radio","required":true,"options":["年假","病假","事假","婚假","陪产假","特殊假"]},
                   {"key":"leaveRange","label":"请假时段","type":"dateRange","required":true},
                   {"key":"days","label":"请假天数","type":"number","required":true,"min":0,"max":60,"unit":"天"},
                   {"key":"reason","label":"请假事由","type":"textarea","required":true,"placeholder":"请说明请假原因"}
