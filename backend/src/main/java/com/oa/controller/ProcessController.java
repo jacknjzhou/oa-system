@@ -86,6 +86,12 @@ public class ProcessController {
         return ApiResponse.success(processService.withdrawInstance(id));
     }
 
+    /** 审批日志：该实例的审批记录时间线（升序，含转办/撤回）。 */
+    @GetMapping("/process-instances/{id}/logs")
+    public ApiResponse<List<com.oa.dto.ApprovalRecordDTO>> logs(@PathVariable Long id) {
+        return ApiResponse.success(processService.listInstanceLogs(id));
+    }
+
     @GetMapping("/process-instances/{id}")
     public ApiResponse<Map<String, Object>> getInstance(@PathVariable Long id) {
         return ApiResponse.success(processService.getInstance(id));

@@ -4,6 +4,7 @@ import com.oa.dto.InstanceDTO;
 import com.oa.dto.ProcessStartRequest;
 import com.oa.dto.TaskCompleteRequest;
 import com.oa.dto.TaskRejectRequest;
+import com.oa.dto.TaskTransferRequest;
 import com.oa.dto.TaskDTO;
 import com.oa.entity.ApprovalRecord;
 import com.oa.entity.ProcessInstance;
@@ -540,6 +541,42 @@ class BpmnFlowTests {
 
         assertEquals(ProcessInstanceStatus.CANCELLED,
                 instanceRepository.findById(instance.getId()).orElseThrow().getStatus());
+    }
+
+    // ==================== 审批日志 ====================
+
+    @Test
+    void logsTimelineIncludesTransferAndApprove_inChronologicalOrder() {
+        var instance = startReimbursement("日志时间线单", 800);
+
+        // 经理把任务转办给 admin
+        loginAs("manager");
+        TaskDTO task = taskService.getMyTasks().stream()
+                .filter(t -> instance.getId().equals(t.getInstanceId()))
+                .findFirst().orElseThrow();
+        TaskTransferRequest transfer = new TaskTransferRequest();
+        transfer.setToUserId(userRepository.findByUsername("admin").orElseThrow().getId());
+        transfer.setComment("出差中，请代审");
+        taskService.transferTask(task.getId(), transfer);
+
+        // admin 接手并完成
+        loginAs("admin");
+        TaskDTO transferred = taskService.getMyTasks().stream()
+                .filter(t -> instance.getId().equals(t.getInstanceId()))
+                .findFirst().orElseThrow();
+        TaskCompleteRequest complete = new TaskCompleteRequest();
+        complete.setComment("同意");
+        taskService.completeTask(transferred.getId(), complete);
+
+        // 日志时间线：SUBMIT → TRANSFER → APPROVE，升序且操作人齐全
+        List<com.oa.dto.ApprovalRecordDTO> logs = processService.listInstanceLogs(instance.getId());
+        assertEquals(3, logs.size());
+        assertEquals(List.of("SUBMIT", "TRANSFER", "APPROVE"),
+                logs.stream().map(com.oa.dto.ApprovalRecordDTO::getAction).toList());
+        assertTrue(logs.stream().allMatch(l -> l.getOperatorName() != null && !l.getOperatorName().isBlank()));
+        assertTrue(logs.get(0).getCreatedAt().compareTo(logs.get(1).getCreatedAt()) <= 0);
+        assertTrue(logs.get(1).getCreatedAt().compareTo(logs.get(2).getCreatedAt()) <= 0);
+        assertEquals("出差中，请代审", logs.get(1).getComment());
     }
 
     /** 以当前登录用户（employee）发起一笔报销。 */

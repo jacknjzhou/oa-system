@@ -566,6 +566,19 @@ public class ProcessService {
         return instance.getCurrentNode();
     }
 
+    /** 审批日志：该实例全部审批记录按时间升序（SUBMIT/审批/驳回/转办/拒绝/撤回）。 */
+    @Transactional(readOnly = true)
+    public List<com.oa.dto.ApprovalRecordDTO> listInstanceLogs(Long instanceId) {
+        loadInstance(instanceId);
+        return approvalRecordRepository.findByInstanceIdOrderByCreatedAtAsc(instanceId).stream()
+                .map(r -> new com.oa.dto.ApprovalRecordDTO(
+                        r.getId(), r.getTaskId(), r.getNodeKey(), r.getNodeName(),
+                        r.getAction() != null ? r.getAction().name() : null,
+                        r.getOperatorName(), r.getComment(), r.getFromNode(), r.getToNode(),
+                        r.getCreatedAt() != null ? r.getCreatedAt().format(TS) : null))
+                .toList();
+    }
+
     public List<Map<String, Object>> toRecordDtos(List<ApprovalRecord> records) {
         return records.stream().map(r -> {
             Map<String, Object> m = new LinkedHashMap<>();

@@ -16,6 +16,30 @@ import { parseUserTasks } from '../utils/bpmn'
 
 type ActionModal = 'approve' | 'reject' | 'deny' | 'transfer' | null
 
+/** 常用审批意见：选中后填充到意见输入框，仍可继续编辑 */
+const COMMON_COMMENTS = ['同意，无异议', '批准，尽快处理', '材料齐全，同意报销', '请补充说明后重报', '不同意，理由见意见']
+
+function CommonCommentPicker({ onPick, disabled }: { onPick: (value: string) => void; disabled: boolean }) {
+  return (
+    <select
+      aria-label="常用意见"
+      className="input w-auto py-1 text-xs"
+      value=""
+      disabled={disabled}
+      onChange={(e) => {
+        if (e.target.value) onPick(e.target.value)
+      }}
+    >
+      <option value="">常用意见…</option>
+      {COMMON_COMMENTS.map((c) => (
+        <option key={c} value={c}>
+          {c}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 export default function ApprovalForm() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -303,9 +327,12 @@ export default function ApprovalForm() {
         }
       >
         <div>
-          <label className="form-label" htmlFor="approve-comment">
-            审批意见（可选）
-          </label>
+          <div className="mb-1 flex items-center justify-between">
+            <label className="form-label mb-0" htmlFor="approve-comment">
+              审批意见（可选）
+            </label>
+            <CommonCommentPicker onPick={setComment} disabled={submitting} />
+          </div>
           <textarea
             id="approve-comment"
             className="input min-h-[80px] resize-y"
@@ -357,9 +384,12 @@ export default function ApprovalForm() {
             </p>
           </div>
           <div>
-            <label className="form-label" htmlFor="reject-comment">
-              驳回意见 <span className="text-red-500">*</span>
-            </label>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="form-label mb-0" htmlFor="reject-comment">
+                驳回意见 <span className="text-red-500">*</span>
+              </label>
+              <CommonCommentPicker onPick={setComment} disabled={submitting} />
+            </div>
             <textarea
               id="reject-comment"
               className="input min-h-[80px] resize-y"
@@ -389,9 +419,12 @@ export default function ApprovalForm() {
         }
       >
         <div>
-          <label className="form-label" htmlFor="deny-comment">
-            拒绝意见 <span className="text-red-500">*</span>
-          </label>
+          <div className="mb-1 flex items-center justify-between">
+            <label className="form-label mb-0" htmlFor="deny-comment">
+              拒绝意见 <span className="text-red-500">*</span>
+            </label>
+            <CommonCommentPicker onPick={setComment} disabled={submitting} />
+          </div>
           <textarea
             id="deny-comment"
             className="input min-h-[80px] resize-y"
@@ -442,9 +475,12 @@ export default function ApprovalForm() {
             </select>
           </div>
           <div>
-            <label className="form-label" htmlFor="transfer-comment">
-              转办意见 <span className="text-red-500">*</span>
-            </label>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="form-label mb-0" htmlFor="transfer-comment">
+                转办意见 <span className="text-red-500">*</span>
+              </label>
+              <CommonCommentPicker onPick={setComment} disabled={submitting} />
+            </div>
             <textarea
               id="transfer-comment"
               className="input min-h-[80px] resize-y"

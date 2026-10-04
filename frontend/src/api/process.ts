@@ -1,5 +1,5 @@
 import apiClient from './client'
-import type { InstanceDTO, InstanceDetail, StartInstancePayload } from '../types'
+import type { ApprovalRecordDTO, InstanceDTO, InstanceDetail, StartInstancePayload } from '../types'
 
 /** 发起流程实例 */
 export async function startInstance(payload: StartInstancePayload): Promise<InstanceDTO> {
@@ -10,6 +10,12 @@ export async function startInstance(payload: StartInstancePayload): Promise<Inst
 /** 我发起的实例列表 */
 export async function getMyInstances(): Promise<InstanceDTO[]> {
   const response = await apiClient.get<InstanceDTO[]>('/process-instances/my')
+  return response.data
+}
+
+/** 审批日志：实例的审批记录时间线（升序，含转办/撤回） */
+export async function getInstanceLogs(id: string): Promise<ApprovalRecordDTO[]> {
+  const response = await apiClient.get<ApprovalRecordDTO[]>(`/process-instances/${id}/logs`)
   return response.data
 }
 
