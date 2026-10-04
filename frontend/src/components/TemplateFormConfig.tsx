@@ -1,170 +1,281 @@
+import { useMemo, useState } from 'react'
 import type { FormField, FormFieldType } from '../types'
+import { CONTROLS, CONTROL_GROUPS, controlByType } from './formControls'
 
 interface TemplateFormConfigProps {
   fields: FormField[]
   onChange: (fields: FormField[]) => void
 }
 
-const FIELD_TYPES: { value: FormFieldType; label: string }[] = [
-  { value: 'text', label: '单行文本' },
-  { value: 'textarea', label: '多行文本' },
-  { value: 'number', label: '数字' },
-  { value: 'select', label: '下拉选择' },
-]
-
 /**
- * 模板表单字段配置编辑器：字段增删、排序、属性编辑，
- * 最终序列化为 formConfig JSON 字符串
+ * 表单设计器（P2-1b，对照致碟云三栏布局）：
+ * 左：控件库（19 类控件分组）；中：表单画布（增删/排序/选中）；右：属性面板。
+ * 所有控件须保存后才可用——未保存的画布改动不生效（与智蝶云一致）。
  */
 export default function TemplateFormConfig({ fields, onChange }: TemplateFormConfigProps) {
-  const updateField = (index: number, patch: Partial<FormField>) => {
-    onChange(fields.map((f, i) => (i === index ? { ...f, ...patch } : f)))
-  }
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
-  const addField = () => {
-    onChange([
-      ...fields,
-      { key: `field_${fields.length + 1}`, label: '', type: 'text', required: false },
-    ])
-  }
+  const selectedIndex = useMemo(
+    () => fields.findIndex((f) => f.key === selectedKey),
+    [fields, selectedKey]
+  )
+  const selected = selectedIndex >= 0 ? fields[selectedIndex] : null
+  const selectedDef = selected ? controlByType(selected.type) : undefined
 
-  const removeField = (index: number) => {
-    onChange(fields.filter((_, i) => i !== index))
-  }
-
-  const moveField = (index: number, offset: -1 | 1) => {
-    const target = index + offset
-    if (target < 0 || target >= fields.length) return
-    const next = [...fields]
-    ;[next[index], next[target]] = [next[target], next[index]]
+  const emit = (next: FormField[]) => {
     onChange(next)
   }
 
-  return (
-    <div className="space-y-3">
-      {fields.length === 0 && (
-        <p className="rounded-lg bg-slate-50 px-3 py-4 text-center text-sm text-slate-400 dark:bg-slate-900/60 dark:text-slate-500">
-          暂无表单字段，点击下方按钮添加
-        </p>
-      )}
+  const addField = (type: FormFieldType) => {
+    const def = controlByType(type)
+    const count = fields.filter((f) => f.type === type).length
+    const field: FormField = {
+      key: `${type}${count > 0 ? `_${count + 1}` : ''}`,
+      label: def?.defaultLabel || type,
+      type,
+      required: false,
+      ...(def?.hasOptions ? { options: ['选项一', '选项二'] } : {}),
+      ...(def?.hasUnit ? { unit: '元' } : {}),
+    }
+    emit([...fields, field])
+    setSelectedKey(field.key)
+  }
 
-      {fields.map((field, index) => (
-        <div key={index} className="rounded-lg border border-slate-200 p-3 dark:border-slate-600">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">字段 Key</label>
-              <input
-                className="input mt-1 py-1.5 text-xs"
-                value={field.key}
-                placeholder="如 amount"
-                onChange={(e) => updateField(index, { key: e.target.value.trim() })}
-              />
+  const updateField = (key: string, patch: Partial<FormField>) => {
+    emit(fields.map((f) => (f.key === key ? { ...f, ...patch } : f)))
+  }
+
+  const removeField = (key: string) => {
+    if (selectedKey === key) setSelectedKey(null)
+    emit(fields.filter((f) => f.key !== key))
+  }
+
+  const moveField = (key: string, offset: -1 | 1) => {
+    const index = fields.findIndex((f) => f.key === key)
+    const target = index + offset
+    if (index < 0 || target < 0 || target >= fields.length) return
+    const next = [...fields]
+    ;[next[index], next[target]] = [next[target], next[index]]
+    emit(next)
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[180px_1fr_260px]">
+      {/* 左栏：控件库 */}
+      <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-600 dark:bg-slate-900/40">
+        <h4 className="mb-2 text-xs font-semibold text-slate-500 dark:text-slate-400">控件库</h4>
+        <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+          {CONTROL_GROUPS.map((group) => (
+            <div key={group}>
+              <p className="mb-1 text-[11px] text-slate-400 dark:text-slate-500">{group}</p>
+              <div className="space-y-1">
+                {CONTROLS.filter((c) => c.group === group).map((c) => (
+                  <button
+                    key={c.type}
+                    type="button"
+                    className="block w-full rounded border border-dashed border-slate-300 px-2 py-1.5 text-left text-xs text-slate-600 transition-colors hover:border-primary-400 hover:bg-primary-50 hover:text-primary-600 dark:border-slate-600 dark:text-slate-300 dark:hover:border-primary-500 dark:hover:bg-primary-500/10"
+                    onClick={() => addField(c.type)}
+                  >
+                    + {c.name}
+                  </button>
+                ))}
+              </div>
             </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 中栏：表单画布 */}
+      <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-600">
+        <h4 className="mb-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+          表单画布（{fields.length} 个控件）
+        </h4>
+        {fields.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-slate-300 px-3 py-8 text-center text-sm text-slate-400 dark:border-slate-600">
+            从左侧控件库点击控件添加
+          </p>
+        ) : (
+          <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+            {fields.map((field, index) => {
+              const def = controlByType(field.type)
+              const isSelected = field.key === selectedKey
+              return (
+                <div
+                  key={field.key}
+                  className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 transition-colors ${
+                    isSelected
+                      ? 'border-primary-400 bg-primary-50 dark:border-primary-500 dark:bg-primary-500/10'
+                      : 'border-slate-200 hover:border-slate-300 dark:border-slate-600 dark:hover:border-slate-500'
+                  }`}
+                  onClick={() => setSelectedKey(field.key)}
+                >
+                  <span className="min-w-0 flex-1 truncate text-sm text-slate-700 dark:text-slate-200">
+                    {field.label || field.key}
+                    {field.required && <span className="ml-1 text-red-500">*</span>}
+                  </span>
+                  <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-400 dark:bg-slate-700 dark:text-slate-300">
+                    {def?.name ?? field.type}
+                  </span>
+                  <button
+                    type="button"
+                    className="shrink-0 text-slate-300 hover:text-slate-500 disabled:opacity-30 dark:text-slate-500"
+                    disabled={index === 0}
+                    title="上移"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      moveField(field.key, -1)
+                    }}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="shrink-0 text-slate-300 hover:text-slate-500 disabled:opacity-30 dark:text-slate-500"
+                    disabled={index === fields.length - 1}
+                    title="下移"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      moveField(field.key, 1)
+                    }}
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    className="shrink-0 text-slate-300 hover:text-red-500"
+                    title="删除"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      removeField(field.key)
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 右栏：属性面板 */}
+      <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-600">
+        <h4 className="mb-2 text-xs font-semibold text-slate-500 dark:text-slate-400">属性</h4>
+        {!selected ? (
+          <p className="text-xs text-slate-400 dark:text-slate-500">点击画布中的控件编辑属性</p>
+        ) : (
+          <div className="space-y-3 text-xs">
             <div>
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">字段类型</label>
+              <label className="font-medium text-slate-500 dark:text-slate-400">控件类型</label>
               <select
                 className="input mt-1 py-1.5 text-xs"
-                value={field.type}
-                onChange={(e) => updateField(index, { type: e.target.value as FormFieldType })}
+                value={selected.type}
+                onChange={(e) => updateField(selected.key, { type: e.target.value as FormFieldType })}
               >
-                {FIELD_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
+                {CONTROLS.map((c) => (
+                  <option key={c.type} value={c.type}>
+                    {c.name}
                   </option>
                 ))}
               </select>
             </div>
-          </div>
-
-          <div className="mt-2 grid grid-cols-[1fr_auto] items-end gap-2">
             <div>
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">字段名称</label>
+              <label className="font-medium text-slate-500 dark:text-slate-400">字段 Key</label>
               <input
                 className="input mt-1 py-1.5 text-xs"
-                value={field.label}
-                placeholder="如 金额"
-                onChange={(e) => updateField(index, { label: e.target.value })}
+                value={selected.key}
+                placeholder="如 amount"
+                onChange={(e) => {
+                  const nextKey = e.target.value.trim()
+                  if (!nextKey || nextKey === selected.key) return
+                  if (fields.some((f) => f.key === nextKey)) return
+                  updateField(selected.key, { key: nextKey })
+                  setSelectedKey(nextKey)
+                }}
               />
             </div>
-            <label className="flex cursor-pointer select-none items-center gap-1.5 pb-2 text-xs font-medium text-slate-600 dark:text-slate-300">
+            <div>
+              <label className="font-medium text-slate-500 dark:text-slate-400">字段名称</label>
+              <input
+                className="input mt-1 py-1.5 text-xs"
+                value={selected.label}
+                placeholder="如 金额"
+                onChange={(e) => updateField(selected.key, { label: e.target.value })}
+              />
+            </div>
+            <label className="flex cursor-pointer select-none items-center gap-1.5 font-medium text-slate-600 dark:text-slate-300">
               <input
                 type="checkbox"
-                className="h-3.5 w-3.5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-900"
-                checked={field.required}
-                onChange={(e) => updateField(index, { required: e.target.checked })}
+                className="h-3.5 w-3.5 accent-primary-600"
+                checked={selected.required}
+                onChange={(e) => updateField(selected.key, { required: e.target.checked })}
               />
               必填
             </label>
-          </div>
-
-          {field.type === 'select' && (
-            <div className="mt-2">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                选项（英文逗号分隔）
-              </label>
+            <div>
+              <label className="font-medium text-slate-500 dark:text-slate-400">占位提示</label>
               <input
                 className="input mt-1 py-1.5 text-xs"
-                value={(field.options ?? []).join(',')}
-                placeholder="如 差旅费,办公费,招待费"
-                onChange={(e) =>
-                  updateField(index, {
-                    options: e.target.value
-                      .split(',')
-                      .map((s) => s.trim())
-                      .filter(Boolean),
-                  })
-                }
+                value={selected.placeholder ?? ''}
+                placeholder="请输入…"
+                onChange={(e) => updateField(selected.key, { placeholder: e.target.value || undefined })}
               />
             </div>
-          )}
-
-          <div className="mt-2 flex justify-end gap-1">
-            <button
-              type="button"
-              className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-30 dark:hover:bg-slate-700 dark:hover:text-slate-200"
-              onClick={() => moveField(index, -1)}
-              disabled={index === 0}
-              title="上移"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-30 dark:hover:bg-slate-700 dark:hover:text-slate-200"
-              onClick={() => moveField(index, 1)}
-              disabled={index === fields.length - 1}
-              title="下移"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              className="rounded-md p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
-              onClick={() => removeField(index)}
-              title="删除字段"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+            {selectedDef?.hasOptions && (
+              <div>
+                <label className="font-medium text-slate-500 dark:text-slate-400">选项（每行一个）</label>
+                <textarea
+                  className="input mt-1 min-h-[72px] resize-y py-1.5 text-xs"
+                  value={(selected.options ?? []).join('\n')}
+                  onChange={(e) =>
+                    updateField(selected.key, {
+                      options: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean),
+                    })
+                  }
                 />
-              </svg>
-            </button>
+              </div>
+            )}
+            {selectedDef?.hasUnit && (
+              <div>
+                <label className="font-medium text-slate-500 dark:text-slate-400">单位</label>
+                <input
+                  className="input mt-1 py-1.5 text-xs"
+                  value={selected.unit ?? ''}
+                  placeholder="元"
+                  onChange={(e) => updateField(selected.key, { unit: e.target.value || undefined })}
+                />
+              </div>
+            )}
+            {(selected.type === 'number' || selected.type === 'amount') && (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-medium text-slate-500 dark:text-slate-400">最小值</label>
+                  <input
+                    className="input mt-1 py-1.5 text-xs"
+                    type="number"
+                    value={selected.min ?? ''}
+                    onChange={(e) => updateField(selected.key, { min: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  />
+                </div>
+                <div>
+                  <label className="font-medium text-slate-500 dark:text-slate-400">最大值</label>
+                  <input
+                    className="input mt-1 py-1.5 text-xs"
+                    type="number"
+                    value={selected.max ?? ''}
+                    onChange={(e) => updateField(selected.key, { max: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  />
+                </div>
+              </div>
+            )}
+            {selected.type === 'department' && (
+              <p className="rounded bg-amber-50 px-2 py-1.5 text-[11px] text-amber-600 dark:bg-amber-500/10 dark:text-amber-400">
+                底座以文本输入承载，部门选择器待员工/部门模块（P4）
+              </p>
+            )}
           </div>
-        </div>
-      ))}
-
-      <button type="button" className="btn btn-secondary w-full" onClick={addField}>
-        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-        </svg>
-        添加字段
-      </button>
+        )}
+      </div>
     </div>
   )
 }

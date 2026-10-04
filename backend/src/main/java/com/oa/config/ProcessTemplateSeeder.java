@@ -38,8 +38,32 @@ public class ProcessTemplateSeeder implements ApplicationRunner {
         ProcessDefinition def = defExists
                 ? definitionRepository.findByDefKey("reimbursement").stream().findFirst().orElseThrow()
                 : createReimbursementDefinition();
+        healReimbursementForm(def);
         // 预置“报销”审批类型（幂等；覆盖旧库升级路径：模板在、类型缺）
         seedReimbursementType(def);
+    }
+
+    /**
+     * 表单配置自愈：旧库模板（P2 前只有 2 个字段）升级为完整报销表单。
+     * 幂等标记：formConfig 已含 "type":"amount" 则跳过。
+     */
+    private static final String FULL_REIMBURSEMENT_FORM = """
+            {"fields":[
+              {"key":"amount","label":"报销金额","type":"amount","required":true,"unit":"元","min":0,"placeholder":"请输入金额"},
+              {"key":"reason","label":"报销事由","type":"textarea","required":true,"placeholder":"请说明报销事由"},
+              {"key":"category","label":"费用类别","type":"select","required":true,"options":["差旅费","办公费","招待费","培训费","其他"]},
+              {"key":"expenseDate","label":"费用发生日期","type":"date","required":false},
+              {"key":"invoice","label":"发票/票据","type":"attachment","required":false}
+            ]}""";
+
+    private void healReimbursementForm(ProcessDefinition def) {
+        String current = def.getFormConfig() == null ? "" : def.getFormConfig();
+        if (current.contains("\"type\":\"amount\"")) {
+            return;
+        }
+        def.setFormConfig(FULL_REIMBURSEMENT_FORM);
+        definitionRepository.save(def);
+        log.info("已升级报销模板表单配置（完整报销表单）");
     }
 
     private ProcessDefinition createReimbursementDefinition() throws Exception {
@@ -57,11 +81,7 @@ public class ProcessTemplateSeeder implements ApplicationRunner {
         def.setVersion(1);
         def.setCategory("finance");
         def.setDescription("金额超过 1 万需财务与部门经理会签，再总经理审批");
-        def.setFormConfig("""
-                {"fields":[
-                  {"key":"amount","label":"金额","type":"number","required":true},
-                  {"key":"reason","label":"报销事由","type":"textarea","required":true}
-                ]}""");
+        def.setFormConfig(FULL_REIMBURSEMENT_FORM);
         def.setBpmnXml(bpmnXml);
         def.setStatus(ProcessDefinitionStatus.PUBLISHED);
         def.setCreator(admin);

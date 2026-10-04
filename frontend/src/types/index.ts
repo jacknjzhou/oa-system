@@ -74,14 +74,48 @@ export interface TemplateUpdatePayload {
 
 // ========== 表单配置 ==========
 
-export type FormFieldType = 'number' | 'text' | 'textarea' | 'select'
+/**
+ * 控件类型（P2-1b 动态表单底座，对照致碟云控件库）：
+ * 基础：text 单行输入框 / textarea 多行输入框 / richText 富文本（底座以 textarea 渲染）
+ * 选择：radio 单选 / checkbox 多选 / select 下拉
+ * 文件：image 图片 / attachment 附件
+ * 时间：date 日期 / time 时间 / dateRange 日期区间 / datetime 日期时间
+ * 关联：contact 联系人 / department 部门
+ * 专项：amount 金额 / number 数字 / phone 电话 / idCard 身份证 / provinceCity 省市
+ */
+export type FormFieldType =
+  | 'text'
+  | 'textarea'
+  | 'richText'
+  | 'radio'
+  | 'checkbox'
+  | 'select'
+  | 'image'
+  | 'attachment'
+  | 'date'
+  | 'time'
+  | 'dateRange'
+  | 'datetime'
+  | 'contact'
+  | 'department'
+  | 'amount'
+  | 'number'
+  | 'phone'
+  | 'idCard'
+  | 'provinceCity'
 
 export interface FormField {
   key: string
   label: string
   type: FormFieldType
   required: boolean
+  /** 选项（radio/checkbox/select） */
   options?: string[]
+  placeholder?: string
+  /** 单位后缀（amount 等） */
+  unit?: string
+  min?: number
+  max?: number
 }
 
 export interface FormConfig {

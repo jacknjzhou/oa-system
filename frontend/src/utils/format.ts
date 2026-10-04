@@ -70,13 +70,36 @@ export function validateFormValues(
   fields: FormField[],
   values: Record<string, string>
 ): string | null {
+  const phoneRe = /^(1[3-9]\d{9}|0\d{2,3}-?\d{7,8})$/
+  const idCardRe = /^\d{17}[\dXx]$/
   for (const field of fields) {
+    const name = field.label || field.key
     const value = (values[field.key] ?? '').trim()
     if (field.required && !value) {
-      return `请填写「${field.label || field.key}」`
+      return `请填写「${name}」`
     }
-    if (field.type === 'number' && value && Number.isNaN(Number(value))) {
-      return `「${field.label || field.key}」必须是数字`
+    if (!value) continue
+
+    if ((field.type === 'number' || field.type === 'amount') && Number.isNaN(Number(value))) {
+      return `「${name}」必须是数字`
+    }
+    if ((field.type === 'number' || field.type === 'amount') && (field.min != null || field.max != null)) {
+      const n = Number(value)
+      if ((field.min != null && n < field.min) || (field.max != null && n > field.max)) {
+        return `「${name}」须在 ${field.min ?? '-∞'} ~ ${field.max ?? '+∞'} 之间`
+      }
+    }
+    if (field.type === 'phone' && !phoneRe.test(value)) {
+      return `「${name}」不是有效电话号码`
+    }
+    if (field.type === 'idCard' && !idCardRe.test(value)) {
+      return `「${name}」不是有效身份证号`
+    }
+    if (field.type === 'dateRange' && !value.includes('~')) {
+      return `「${name}」需同时选择起止日期`
+    }
+    if (field.type === 'provinceCity' && !value.includes('/')) {
+      return `「${name}」需同时选择省与市`
     }
   }
   return null

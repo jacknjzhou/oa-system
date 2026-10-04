@@ -295,6 +295,7 @@ export default function StartProcess() {
                 values={values}
                 onChange={handleValueChange}
                 disabled={submitting}
+                users={ccUsers}
               />
               <div>
                 <span className="form-label">抄送人（可选）</span>
