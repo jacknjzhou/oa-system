@@ -1,12 +1,19 @@
 package com.oa;
 
+import com.oa.dto.InstanceDTO;
 import com.oa.dto.ProcessStartRequest;
 import com.oa.dto.TaskCompleteRequest;
 import com.oa.dto.TaskRejectRequest;
 import com.oa.dto.TaskDTO;
 import com.oa.entity.ProcessInstance;
+import com.oa.entity.User;
+import com.oa.enums.NotifyType;
 import com.oa.enums.ProcessInstanceStatus;
+import com.oa.enums.RefType;
+import com.oa.repository.CcRecordRepository;
+import com.oa.repository.NotificationRepository;
 import com.oa.repository.ProcessInstanceRepository;
+import com.oa.repository.UserRepository;
 import com.oa.service.ProcessService;
 import com.oa.service.TaskService;
 import org.junit.jupiter.api.AfterEach;
@@ -42,6 +49,15 @@ class BpmnFlowTests {
 
     @Autowired
     private ProcessInstanceRepository instanceRepository;
+
+    @Autowired
+    private CcRecordRepository ccRecordRepository;
+
+    @Autowired
+    private NotificationRepository notificationRepository;
+
+    @Autowired
+    private UserRepository userRepository;
 
     @BeforeEach
     void setUp() {
@@ -352,6 +368,76 @@ class BpmnFlowTests {
                 .findFirst().orElseThrow();
         assertEquals("APPROVE", listed.getLastAction());
         assertEquals("COMPLETED", listed.getStatus());
+    }
+
+    @Test
+    void ccDelegate_recordsAndNotifiesCcUserOncePerInstance() {
+        // 高额报销抄送财务：流程走完（完成时 cc_notify）→ 财务得到 1 条 cc_record + 1 条抄送通知
+        User finance = userRepository.findByUsername("finance").orElseThrow();
+
+        ProcessStartRequest req = new ProcessStartRequest();
+        req.setDefId(templateId("reimbursement"));
+        req.setTitle("抄送测试");
+        req.setBusinessData("{\"amount\": 20000, \"reason\": \"测试\"}");
+        req.setCcUserIds(List.of(finance.getId()));
+        var instance = processService.startInstance(req);
+
+        TaskCompleteRequest complete = new TaskCompleteRequest();
+        complete.setComment("同意");
+        loginAs("manager");
+        TaskDTO dept = taskService.getMyTasks().stream()
+                .filter(t -> instance.getId().equals(t.getInstanceId()))
+                .findFirst().orElseThrow();
+        taskService.completeTask(dept.getId(), complete);
+        approveMyTask(instance.getId(), "manager", "countersign", complete);
+        approveMyTask(instance.getId(), "finance", "countersign", complete);
+        loginAs("admin");
+        TaskDTO gm = taskService.getMyTasks().stream()
+                .filter(t -> instance.getId().equals(t.getInstanceId()))
+                .findFirst().orElseThrow();
+        taskService.completeTask(gm.getId(), complete);
+
+        ProcessInstance done = instanceRepository.findById(instance.getId()).orElseThrow();
+        assertEquals(ProcessInstanceStatus.COMPLETED, done.getStatus());
+
+        // 抄送记录：该实例 × 财务 恰好 1 条（uk 去重）
+        assertEquals(1, ccRecordRepository.findByInstanceId(instance.getId()).size());
+
+        // 抄送通知：恰好 1 条 CC 通知指向该实例
+        long ccNotifs = notificationRepository.findByUserIdOrderByCreatedAtDesc(finance.getId()).stream()
+                .filter(n -> n.getNotifyType() == NotifyType.CC
+                        && n.getRefType() == RefType.PROCESS_INSTANCE
+                        && instance.getId().toString().equals(n.getRefId()))
+                .count();
+        assertEquals(1, ccNotifs);
+
+        // 抄送给我列表：财务看到该实例且仅 1 条
+        loginAs("finance");
+        List<InstanceDTO> ccList = processService.listCcInstances();
+        assertEquals(1, ccList.stream().filter(i -> instance.getId().equals(i.getId())).count());
+    }
+
+    @Test
+    void lowAmountFlow_alsoNotifiesCcUsersOnCompletion() {
+        // 低额路径（经理通过即结束）同样经过 cc_notify：抄送在流程完成时统一触发
+        User finance = userRepository.findByUsername("finance").orElseThrow();
+
+        ProcessStartRequest req = new ProcessStartRequest();
+        req.setDefId(templateId("reimbursement"));
+        req.setTitle("低额抄送测试");
+        req.setBusinessData("{\"amount\": 300, \"reason\": \"测试\"}");
+        req.setCcUserIds(List.of(finance.getId()));
+        var instance = processService.startInstance(req);
+
+        loginAs("manager");
+        TaskDTO dept = taskService.getMyTasks().stream()
+                .filter(t -> instance.getId().equals(t.getInstanceId()))
+                .findFirst().orElseThrow();
+        TaskCompleteRequest complete = new TaskCompleteRequest();
+        complete.setComment("同意");
+        taskService.completeTask(dept.getId(), complete);
+
+        assertEquals(1, ccRecordRepository.findByInstanceId(instance.getId()).size());
     }
 
     /** 以指定用户身份完成该实例指定节点的当前任务。 */

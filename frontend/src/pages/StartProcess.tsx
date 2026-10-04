@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import type { Template } from '../types'
+import type { Template, UserSummary } from '../types'
 import { getTemplates } from '../api/template'
 import { startInstance } from '../api/process'
+import { getUsers } from '../api/user'
 import { useToast } from '../components/Toast'
 import DynamicForm from '../components/DynamicForm'
 import EmptyState, { ErrorState, LoadingState } from '../components/EmptyState'
@@ -22,6 +23,8 @@ export default function StartProcess() {
   const [title, setTitle] = useState('')
   const [values, setValues] = useState<Record<string, string>>({})
   const [asDraft, setAsDraft] = useState(false)
+  const [ccUserIds, setCcUserIds] = useState<string[]>([])
+  const [ccUsers, setCcUsers] = useState<UserSummary[]>([])
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -36,6 +39,13 @@ export default function StartProcess() {
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
+      })
+    getUsers()
+      .then((data) => {
+        if (!cancelled) setCcUsers(data)
+      })
+      .catch(() => {
+        /* 抄送名单加载失败不阻断发起主流程 */
       })
     return () => {
       cancelled = true
@@ -57,6 +67,11 @@ export default function StartProcess() {
     setTitle('')
     setValues({})
     setAsDraft(false)
+    setCcUserIds([])
+  }
+
+  const toggleCcUser = (id: string) => {
+    setCcUserIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
   const closeDrawer = () => {
@@ -87,8 +102,12 @@ export default function StartProcess() {
         title: title.trim(),
         businessData: JSON.stringify(values),
         draft: asDraft || undefined,
+        ccUserIds: ccUserIds.length > 0 ? ccUserIds : undefined,
       })
-      showToast(asDraft ? '已存为草稿，可在「我的申请」提交' : '流程发起成功', 'success')
+      showToast(
+        asDraft ? '已存为草稿，可在「我的申请」提交' : `流程发起成功${ccUserIds.length > 0 ? '，已选择抄送人' : ''}`,
+        'success'
+      )
       setSelected(null)
       navigate('/my-instances')
     } catch (err) {
@@ -247,6 +266,36 @@ export default function StartProcess() {
                 onChange={handleValueChange}
                 disabled={submitting}
               />
+              <div>
+                <span className="form-label">抄送人（可选）</span>
+                {ccUsers.length > 0 ? (
+                  <div className="max-h-36 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2 dark:border-slate-600">
+                    {ccUsers.map((u) => (
+                      <label
+                        key={u.id}
+                        className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-primary-600"
+                          checked={ccUserIds.includes(u.id)}
+                          onChange={() => toggleCcUser(u.id)}
+                          disabled={submitting}
+                        />
+                        <span>
+                          {u.realName || u.username}
+                          {u.position ? <span className="text-xs text-slate-400">（{u.position}）</span> : null}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400">暂无可选用户</p>
+                )}
+                <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                  流程完成时抄送通知所选人（每流程每人一次）
+                </p>
+              </div>
               <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
                 <input
                   type="checkbox"

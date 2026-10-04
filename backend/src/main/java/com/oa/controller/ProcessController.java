@@ -74,6 +74,12 @@ public class ProcessController {
         return ApiResponse.success(processService.listMyInstances());
     }
 
+    /** 抄送给我：我被抄送的实例列表。 */
+    @GetMapping("/process-instances/cc")
+    public ApiResponse<List<InstanceDTO>> ccInstances() {
+        return ApiResponse.success(processService.listCcInstances());
+    }
+
     @GetMapping("/process-instances/{id}")
     public ApiResponse<Map<String, Object>> getInstance(@PathVariable Long id) {
         return ApiResponse.success(processService.getInstance(id));

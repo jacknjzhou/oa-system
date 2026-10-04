@@ -13,6 +13,12 @@ export async function getMyInstances(): Promise<InstanceDTO[]> {
   return response.data
 }
 
+/** 抄送给我的实例列表 */
+export async function getCcInstances(): Promise<InstanceDTO[]> {
+  const response = await apiClient.get<InstanceDTO[]>('/process-instances/cc')
+  return response.data
+}
+
 /** 实例详情（含 BPMN XML、节点高亮与审批记录） */
 export async function getInstance(id: string): Promise<InstanceDetail> {
   const response = await apiClient.get<InstanceDetail>(`/process-instances/${id}`)

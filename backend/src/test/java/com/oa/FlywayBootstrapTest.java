@@ -29,8 +29,8 @@ class FlywayBootstrapTest {
 
     @Test
     void contextBootsAndMigrationsApplied() {
-        // 当前迁移版本应为 V5（V1 业务表 / V2 refresh_token / V3 种子 / V4 财务种子 / V5 审批四态）
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("5");
+        // 当前迁移版本应为 V8（V1 业务表 / V2 refresh_token / V3 种子 / V4 财务种子 / V5 审批四态 / V6 抄送记录 / V7 抄送通知类型 / V8 实例抄送名单）
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("8");
     }
 
     @Test

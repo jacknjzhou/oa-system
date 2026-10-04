@@ -49,9 +49,16 @@
       <outgoing>flow5</outgoing>
     </userTask>
 
-    <endEvent id="end" name="结束">
+    <!-- 抄送：两条分支（低额直达 / 高额会签+总经理）完成时都经过此节点，
+         CcDelegate 按流程变量 ccUserIds 写抄送记录并通知（uk 去重，每实例每人一次） -->
+    <serviceTask id="cc_notify" name="抄送" flowable:delegateExpression="${ccDelegate}">
       <incoming>flow4</incoming>
       <incoming>flow5</incoming>
+      <outgoing>flow8</outgoing>
+    </serviceTask>
+
+    <endEvent id="end" name="结束">
+      <incoming>flow8</incoming>
     </endEvent>
 
     <sequenceFlow id="flow1" sourceRef="start" targetRef="dept_manager"/>
@@ -59,10 +66,11 @@
     <sequenceFlow id="flow3" name="金额 > 1万" sourceRef="amount_gateway" targetRef="prepare_countersign">
       <conditionExpression xsi:type="bpmn:tFormalExpression">${amount &gt; 10000}</conditionExpression>
     </sequenceFlow>
-    <sequenceFlow id="flow4" name="默认" sourceRef="amount_gateway" targetRef="end">
+    <sequenceFlow id="flow4" name="默认" sourceRef="amount_gateway" targetRef="cc_notify">
       <conditionExpression xsi:type="bpmn:tFormalExpression">${amount &lt;= 10000}</conditionExpression>
     </sequenceFlow>
-    <sequenceFlow id="flow5" sourceRef="gm_manager" targetRef="end"/>
+    <sequenceFlow id="flow5" sourceRef="gm_manager" targetRef="cc_notify"/>
+    <sequenceFlow id="flow8" sourceRef="cc_notify" targetRef="end"/>
     <sequenceFlow id="flow6" sourceRef="prepare_countersign" targetRef="countersign"/>
     <sequenceFlow id="flow7" sourceRef="countersign" targetRef="gm_manager"/>
 
@@ -88,6 +96,9 @@
       <bpmndi:BPMNShape bpmnElement="gm_manager" id="BPMNShape_gm_manager">
         <omgdc:Bounds height="60" width="100" x="740" y="60"/>
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="cc_notify" id="BPMNShape_cc_notify">
+        <omgdc:Bounds height="60" width="80" x="660" y="148"/>
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="end" id="BPMNShape_end">
         <omgdc:Bounds height="28" width="28" x="780" y="164"/>
       </bpmndi:BPMNShape>
@@ -106,12 +117,16 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow4" id="BPMNEdge_flow4">
         <omgdi:waypoint x="390" y="178"/>
-        <omgdi:waypoint x="780" y="178"/>
+        <omgdi:waypoint x="660" y="178"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow5" id="BPMNEdge_flow5">
-        <omgdi:waypoint x="840" y="90"/>
-        <omgdi:waypoint x="794" y="90"/>
-        <omgdi:waypoint x="794" y="164"/>
+        <omgdi:waypoint x="790" y="120"/>
+        <omgdi:waypoint x="790" y="178"/>
+        <omgdi:waypoint x="740" y="178"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow8" id="BPMNEdge_flow8">
+        <omgdi:waypoint x="740" y="178"/>
+        <omgdi:waypoint x="780" y="178"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow6" id="BPMNEdge_flow6">
         <omgdi:waypoint x="540" y="80"/>

@@ -18,6 +18,7 @@ import com.oa.enums.ProcessInstanceStatus;
 import com.oa.enums.RefType;
 import com.oa.entity.Role;
 import com.oa.repository.ApprovalRecordRepository;
+import com.oa.repository.CcRecordRepository;
 import com.oa.repository.ProcessDefinitionRepository;
 import com.oa.repository.ProcessInstanceRepository;
 import com.oa.repository.RoleRepository;
@@ -58,6 +59,7 @@ public class ProcessService {
     private final ProcessDefinitionRepository definitionRepository;
     private final ProcessInstanceRepository instanceRepository;
     private final ApprovalRecordRepository approvalRecordRepository;
+    private final CcRecordRepository ccRecordRepository;
     private final RoleRepository roleRepository;
     private final AuthService authService;
     private final NotificationService notificationService;
@@ -191,6 +193,10 @@ public class ProcessService {
         instance.setBusinessData(req.getBusinessData());
         instance.setPriority(Priority.NORMAL);
 
+        if (req.getCcUserIds() != null && !req.getCcUserIds().isEmpty()) {
+            instance.setCcUserIds(new java.util.LinkedHashSet<>(req.getCcUserIds()));
+        }
+
         if (Boolean.TRUE.equals(req.getDraft())) {
             // 草稿：只落自有表（status=DRAFT，无 Flowable 实例），不部署不启动引擎
             instance.setSubmittedAt(null);
@@ -229,6 +235,10 @@ public class ProcessService {
     /** 启动 Flowable 引擎实例、记录发起审批、同步当前节点与待办通知。 */
     private void launchEngine(ProcessInstance instance) {
         Map<String, Object> variables = parseVariables(instance.getBusinessData());
+        // 抄送名单：草稿提交时同样携带（若发起时选择了抄送人）
+        if (instance.getCcUserIds() != null && !instance.getCcUserIds().isEmpty()) {
+            variables.put("ccUserIds", java.util.List.copyOf(instance.getCcUserIds()));
+        }
         org.flowable.engine.runtime.ProcessInstance flowableInstance = runtimeService
                 .startProcessInstanceByKey(instance.getDef().getDefKey(), instance.getInstanceNo(), variables);
         instance.setFlowableInstanceId(flowableInstance.getId());
@@ -430,6 +440,15 @@ public class ProcessService {
         User current = authService.getCurrentUser();
         return instanceRepository.findByInitiatorId(current.getId()).stream()
                 .map(this::toInstanceDto)
+                .toList();
+    }
+
+    /** 抄送给我：当前用户被抄送的实例列表（cc_record 每人每实例唯一，天然去重）。 */
+    @Transactional(readOnly = true)
+    public List<InstanceDTO> listCcInstances() {
+        User current = authService.getCurrentUser();
+        return ccRecordRepository.findByUserId(current.getId()).stream()
+                .map(r -> toInstanceDto(r.getInstance()))
                 .toList();
     }
 

@@ -121,6 +121,8 @@ export interface StartInstancePayload {
   businessData: string
   /** true = 只存草稿，稍后从“我的申请”提交 */
   draft?: boolean
+  /** 抄送人用户 ID：流程完成时抄送通知 */
+  ccUserIds?: string[]
 }
 
 export type ApprovalAction = 'SUBMIT' | 'APPROVE' | 'REJECT' | 'TRANSFER' | 'CANCEL' | 'DENY'
