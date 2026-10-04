@@ -10,7 +10,6 @@ import com.oa.entity.ProcessDefinition;
 import com.oa.entity.ProcessInstance;
 import com.oa.entity.User;
 import com.oa.enums.ApprovalAction;
-import com.oa.enums.BusinessType;
 import com.oa.enums.NotifyType;
 import com.oa.enums.Priority;
 import com.oa.enums.ProcessDefinitionStatus;
@@ -189,7 +188,7 @@ public class ProcessService {
         instance.setDefVersion(def.getVersion());
         instance.setTitle(req.getTitle());
         instance.setInitiator(initiator);
-        instance.setBusinessType(req.getBusinessType() != null ? req.getBusinessType() : BusinessType.REIMBURSEMENT);
+        instance.setBusinessType(req.getBusinessType() != null ? req.getBusinessType() : "REIMBURSEMENT");
         instance.setBusinessData(req.getBusinessData());
         instance.setPriority(Priority.NORMAL);
 
@@ -512,7 +511,7 @@ public class ProcessService {
         dto.setInitiatorId(instance.getInitiator().getId());
         dto.setInitiatorName(instance.getInitiator().getRealName() != null
                 ? instance.getInitiator().getRealName() : instance.getInitiator().getUsername());
-        dto.setBusinessType(instance.getBusinessType() != null ? instance.getBusinessType().name() : null);
+        dto.setBusinessType(instance.getBusinessType());
         dto.setBusinessData(instance.getBusinessData());
         dto.setCurrentNode(instance.getCurrentNode());
         dto.setCurrentNodeName(currentNodeName(instance));

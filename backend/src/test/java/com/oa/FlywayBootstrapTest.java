@@ -29,8 +29,8 @@ class FlywayBootstrapTest {
 
     @Test
     void contextBootsAndMigrationsApplied() {
-        // 当前迁移版本应为 V8（V1 业务表 / V2 refresh_token / V3 种子 / V4 财务种子 / V5 审批四态 / V6 抄送记录 / V7 抄送通知类型 / V8 实例抄送名单）
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("8");
+        // 当前迁移版本应为 V10（… / V9 审批类型 / V10 business_type 字符串化）
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("10");
     }
 
     @Test
@@ -44,6 +44,25 @@ class FlywayBootstrapTest {
                     Long.class, column.toUpperCase());
             assertThat(count).as("cc_record.%s", column).isEqualTo(1L);
         }
+    }
+
+    @Test
+    void v10_businessTypeIsString() {
+        // 回归：business_type 必须接受任意字符串类型代码（V10 前为 TINYINT + CHECK 0..3，
+        // 自定义审批类型如 'CONTRACT' 会被约束拒绝）。
+        String probeNo = "PROBE_BT_" + System.nanoTime();
+        jdbc.update("""
+                insert into process_instance (instance_no, title, status, priority,
+                                               def_id, initiator_id, business_type,
+                                               created_at, updated_at)
+                select ?, 'V10探针', ?, 0,
+                       id, (select min(id) from sys_user), 'CUSTOM_CODE',
+                       current_timestamp, current_timestamp
+                from process_definition where def_key = 'reimbursement'
+                """, probeNo, ProcessInstanceStatus.DRAFT.ordinal());
+        String actual = jdbc.queryForObject(
+                "select business_type from process_instance where instance_no = ?", String.class, probeNo);
+        assertThat(actual).isEqualTo("CUSTOM_CODE");
     }
 
     @Test

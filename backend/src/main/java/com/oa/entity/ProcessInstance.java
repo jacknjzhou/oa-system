@@ -1,7 +1,6 @@
 package com.oa.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.oa.enums.BusinessType;
 import com.oa.enums.Priority;
 import com.oa.enums.ProcessInstanceStatus;
 import jakarta.persistence.CollectionTable;
@@ -59,9 +58,9 @@ public class ProcessInstance extends BaseEntity {
     @JoinColumn(name = "initiator_id")
     private User initiator;
 
-    @Enumerated(EnumType.ORDINAL)
-    @Column(name = "business_type")
-    private BusinessType businessType;
+    /** 业务类型代码（字符串，取审批类型 approval_type.code；历史数据 V10 迁移自序号） */
+    @Column(name = "business_type", length = 64)
+    private String businessType;
 
     @Column(name = "business_id", length = 64)
     private String businessId;

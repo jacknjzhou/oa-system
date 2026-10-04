@@ -123,9 +123,25 @@ export interface StartInstancePayload {
   draft?: boolean
   /** 抄送人用户 ID：流程完成时抄送通知 */
   ccUserIds?: string[]
+  /** 业务类型代码（取审批类型 code） */
+  businessType?: string
 }
 
 export type ApprovalAction = 'SUBMIT' | 'APPROVE' | 'REJECT' | 'TRANSFER' | 'CANCEL' | 'DENY'
+
+/** 审批类型：发起入口的业务分类（报销/采购/请假…），关联一个流程模板 */
+export interface ApprovalType {
+  id: string
+  code: string
+  name: string
+  category?: string | null
+  icon?: string | null
+  description?: string | null
+  weight: number
+  defId: string
+  defName?: string | null
+  enabled: boolean
+}
 
 export interface ApprovalRecordDTO {
   id: string

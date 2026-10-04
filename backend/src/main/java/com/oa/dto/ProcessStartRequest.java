@@ -1,6 +1,5 @@
 package com.oa.dto;
 
-import com.oa.enums.BusinessType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -20,7 +19,8 @@ public class ProcessStartRequest {
     @NotBlank(message = "标题不能为空")
     private String title;
 
-    private BusinessType businessType;
+    /** 业务类型代码（可选，取审批类型 code；缺省 REIMBURSEMENT） */
+    private String businessType;
 
     private String businessData;
 

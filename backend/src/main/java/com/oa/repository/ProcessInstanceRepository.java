@@ -1,7 +1,6 @@
 package com.oa.repository;
 
 import com.oa.entity.ProcessInstance;
-import com.oa.enums.BusinessType;
 import com.oa.enums.ProcessInstanceStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -14,7 +13,10 @@ public interface ProcessInstanceRepository extends JpaRepository<ProcessInstance
 
     List<ProcessInstance> findByStatus(ProcessInstanceStatus status);
 
-    List<ProcessInstance> findByBusinessTypeAndBusinessId(BusinessType businessType, String businessId);
+    List<ProcessInstance> findByBusinessTypeAndBusinessId(String businessType, String businessId);
+
+    /** business_type 为类型代码（字符串）的实例数 */
+    long countByBusinessType(String businessType);
 
     Optional<ProcessInstance> findByFlowableInstanceId(String flowableInstanceId);
 }

@@ -12,6 +12,7 @@ import DocumentList from './pages/DocumentList'
 import DocumentDetail from './pages/DocumentDetail'
 import TemplateList from './pages/TemplateList'
 import TemplateEditor from './pages/TemplateEditor'
+import ApprovalTypes from './pages/ApprovalTypes'
 
 export default function App() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="/cc" element={<CcList />} />
         <Route path="/documents" element={<DocumentList />} />
         <Route path="/documents/:id" element={<DocumentDetail />} />
+        <Route path="/approval-types" element={<ApprovalTypes />} />
         <Route path="/templates" element={<TemplateList />} />
         <Route path="/templates/new" element={<TemplateEditor mode="new" />} />
         <Route path="/templates/:id" element={<TemplateEditor mode="edit" />} />

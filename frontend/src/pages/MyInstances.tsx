@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { InstanceDTO } from '../types'
+import type { ApprovalType, InstanceDTO } from '../types'
 import { getMyInstances, submitInstance, withdrawInstance } from '../api/process'
+import { getApprovalTypes } from '../api/approvalType'
 import StatusBadge, { PriorityBadge } from '../components/Badge'
 import EmptyState, { ErrorState, LoadingState } from '../components/EmptyState'
 import { useToast } from '../components/Toast'
@@ -30,6 +31,19 @@ export default function MyInstances() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [withdrawingId, setWithdrawingId] = useState<string | null>(null)
+  const [types, setTypes] = useState<ApprovalType[]>([])
+
+  useEffect(() => {
+    // 类型名称解析（code → name）；失败时回退显示 code
+    getApprovalTypes()
+      .then(setTypes)
+      .catch(() => setTypes([]))
+  }, [])
+
+  const typeName = (code?: string) => {
+    if (!code) return ''
+    return types.find((t) => t.code === code)?.name ?? code
+  }
 
   const loadInstances = useCallback(() => {
     setLoading(true)
@@ -139,6 +153,11 @@ export default function MyInstances() {
                 <p className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
                   <span>单号：{instance.instanceNo}</span>
                   <span>模板：{instance.defName} v{instance.defVersion}</span>
+                  {instance.businessType && (
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+                      {typeName(instance.businessType)}
+                    </span>
+                  )}
                   <span>
                     节点：
                     {instance.status === 'RUNNING'

@@ -1,8 +1,10 @@
 package com.oa.config;
 
+import com.oa.entity.ApprovalType;
 import com.oa.entity.ProcessDefinition;
 import com.oa.entity.User;
 import com.oa.enums.ProcessDefinitionStatus;
+import com.oa.repository.ApprovalTypeRepository;
 import com.oa.repository.ProcessDefinitionRepository;
 import com.oa.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -26,13 +28,23 @@ import java.time.LocalDateTime;
 public class ProcessTemplateSeeder implements ApplicationRunner {
 
     private final ProcessDefinitionRepository definitionRepository;
+    private final ApprovalTypeRepository approvalTypeRepository;
     private final UserRepository userRepository;
 
     @Override
     @Transactional
     public void run(ApplicationArguments args) throws Exception {
+        boolean defExists = !definitionRepository.findByDefKey("reimbursement").isEmpty();
+        ProcessDefinition def = defExists
+                ? definitionRepository.findByDefKey("reimbursement").stream().findFirst().orElseThrow()
+                : createReimbursementDefinition();
+        // 预置“报销”审批类型（幂等；覆盖旧库升级路径：模板在、类型缺）
+        seedReimbursementType(def);
+    }
+
+    private ProcessDefinition createReimbursementDefinition() throws Exception {
         if (!definitionRepository.findByDefKey("reimbursement").isEmpty()) {
-            return;
+            return definitionRepository.findByDefKey("reimbursement").stream().findFirst().orElseThrow();
         }
         String bpmnXml = new String(
                 new ClassPathResource("processes/reimbursement.bpmn20.xml").getInputStream().readAllBytes(),
@@ -56,5 +68,25 @@ public class ProcessTemplateSeeder implements ApplicationRunner {
         def.setPublishedAt(LocalDateTime.now());
         definitionRepository.save(def);
         log.info("已内置报销审批模板 reimbursement");
+        return def;
     }
+
+    /** 幂等补种“报销”审批类型：关联 reimbursement 模板。 */
+    private void seedReimbursementType(ProcessDefinition def) {
+        if (approvalTypeRepository.findByCode("REIMBURSEMENT").isPresent()) {
+            return;
+        }
+        ApprovalType type = new ApprovalType();
+        type.setCode("REIMBURSEMENT");
+        type.setName("报销");
+        type.setCategory("财务");
+        type.setIcon("🧾");
+        type.setDescription("费用报销审批");
+        type.setWeight(10);
+        type.setDef(def);
+        type.setEnabled(true);
+        approvalTypeRepository.save(type);
+        log.info("已内置“报销”审批类型");
+    }
+
 }

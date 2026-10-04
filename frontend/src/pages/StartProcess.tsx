@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import type { Template, UserSummary } from '../types'
+import type { ApprovalType, Template, UserSummary } from '../types'
 import { getTemplates } from '../api/template'
+import { getEnabledApprovalTypes } from '../api/approvalType'
 import { startInstance } from '../api/process'
 import { getUsers } from '../api/user'
 import { useToast } from '../components/Toast'
@@ -9,9 +10,11 @@ import DynamicForm from '../components/DynamicForm'
 import EmptyState, { ErrorState, LoadingState } from '../components/EmptyState'
 import { categoryEmoji, parseFormConfig, validateFormValues } from '../utils/format'
 
+/** 发起审批（P2-1a 起按“审批类型”组织：类型卡片 → 关联模板表单） */
 export default function StartProcess() {
   const navigate = useNavigate()
   const { showToast } = useToast()
+  const [types, setTypes] = useState<ApprovalType[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -19,7 +22,7 @@ export default function StartProcess() {
   const [category, setCategory] = useState('全部')
 
   // 发起抽屉状态
-  const [selected, setSelected] = useState<Template | null>(null)
+  const [selected, setSelected] = useState<ApprovalType | null>(null)
   const [title, setTitle] = useState('')
   const [values, setValues] = useState<Record<string, string>>({})
   const [asDraft, setAsDraft] = useState(false)
@@ -30,12 +33,14 @@ export default function StartProcess() {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    getTemplates(true)
-      .then((data) => {
-        if (!cancelled) setTemplates(data)
+    Promise.all([getEnabledApprovalTypes().catch(() => []), getTemplates(true)])
+      .then(([typeData, templateData]) => {
+        if (cancelled) return
+        setTypes(typeData)
+        setTemplates(templateData)
       })
       .catch((err) => {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : '模板加载失败')
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : '审批类型加载失败')
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -53,17 +58,24 @@ export default function StartProcess() {
   }, [])
 
   const categories = useMemo(() => {
-    const set = new Set(templates.map((t) => t.category).filter(Boolean))
+    const set = new Set<string>()
+    types.forEach((t) => {
+      if (t.category) set.add(t.category)
+    })
     return ['全部', ...Array.from(set)]
-  }, [templates])
+  }, [types])
 
-  const visibleTemplates = useMemo(
-    () => (category === '全部' ? templates : templates.filter((t) => t.category === category)),
-    [templates, category]
+  const visibleTypes = useMemo(
+    () => (category === '全部' ? types : types.filter((t) => t.category === category)),
+    [types, category]
   )
 
-  const openDrawer = (template: Template) => {
-    setSelected(template)
+  /** 类型 → 关联流程模板（formConfig / 版本） */
+  const templateFor = (type: ApprovalType): Template | null =>
+    templates.find((t) => String(t.id) === String(type.defId)) ?? null
+
+  const openDrawer = (type: ApprovalType) => {
+    setSelected(type)
     setTitle('')
     setValues({})
     setAsDraft(false)
@@ -89,7 +101,8 @@ export default function StartProcess() {
       showToast('请填写申请标题', 'error')
       return
     }
-    const fields = parseFormConfig(selected.formConfig).fields
+    const template = templateFor(selected)
+    const fields = template ? parseFormConfig(template.formConfig).fields : []
     const error = validateFormValues(fields, values)
     if (error) {
       showToast(error, 'error')
@@ -98,9 +111,10 @@ export default function StartProcess() {
     setSubmitting(true)
     try {
       await startInstance({
-        defId: selected.id,
+        defId: selected.defId,
         title: title.trim(),
         businessData: JSON.stringify(values),
+        businessType: selected.code,
         draft: asDraft || undefined,
         ccUserIds: ccUserIds.length > 0 ? ccUserIds : undefined,
       })
@@ -117,7 +131,8 @@ export default function StartProcess() {
     }
   }
 
-  const drawerFields = selected ? parseFormConfig(selected.formConfig).fields : []
+  const drawerTemplate = selected ? templateFor(selected) : null
+  const drawerFields = drawerTemplate ? parseFormConfig(drawerTemplate.formConfig).fields : []
 
   return (
     <div className="mx-auto max-w-6xl p-6">
@@ -125,7 +140,9 @@ export default function StartProcess() {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">发起审批</h2>
-          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">选择审批模板，填写表单后提交申请</p>
+          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+            选择审批类型，填写表单后提交申请
+          </p>
         </div>
         <Link
           to="/my-instances"
@@ -158,55 +175,67 @@ export default function StartProcess() {
 
       {/* 内容 */}
       {loading ? (
-        <LoadingState text="正在加载审批模板…" />
+        <LoadingState text="正在加载审批类型…" />
       ) : loadError ? (
         <ErrorState message={loadError} />
-      ) : visibleTemplates.length === 0 ? (
+      ) : visibleTypes.length === 0 ? (
         <div className="card">
           <EmptyState
             icon="🗂️"
-            title="暂无可发起的审批模板"
-            description="请联系管理员在「审批模板」中发布模板"
+            title="暂无可发起的审批类型"
+            description="请联系管理员在「审批类型」中启用类型"
           />
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {visibleTemplates.map((template) => {
-            const fields = parseFormConfig(template.formConfig).fields
+          {visibleTypes.map((type) => {
+            const template = templateFor(type)
+            const fields = template ? parseFormConfig(template.formConfig).fields : []
             const preview = fields.map((f) => f.label || f.key).slice(0, 4).join('、')
+            const defOk = template !== null
             return (
               <button
-                key={template.id}
+                key={type.id}
                 type="button"
-                className="card group p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-primary-300 hover:shadow-lifted dark:hover:border-primary-500/50"
-                onClick={() => openDrawer(template)}
+                disabled={!defOk}
+                className={`card group p-5 text-left transition-all duration-200 ${
+                  defOk
+                    ? 'hover:-translate-y-0.5 hover:border-primary-300 hover:shadow-lifted dark:hover:border-primary-500/50'
+                    : 'cursor-not-allowed opacity-60'
+                }`}
+                onClick={() => defOk && openDrawer(type)}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-50 text-2xl dark:bg-primary-500/10">
                     <span role="img" aria-hidden="true">
-                      {categoryEmoji(template.category)}
+                      {type.icon || categoryEmoji(type.category)}
                     </span>
                   </div>
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-700 dark:text-slate-300">
-                    v{template.version}
-                  </span>
+                  {template && (
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+                      v{template.version}
+                    </span>
+                  )}
                 </div>
                 <h3 className="mt-4 text-base font-semibold text-slate-900 group-hover:text-primary-600 dark:text-slate-100 dark:group-hover:text-primary-400">
-                  {template.name}
+                  {type.name}
                 </h3>
                 <p className="mt-1 line-clamp-2 min-h-[40px] text-sm text-slate-500 dark:text-slate-400">
-                  {preview ? `表单字段：${preview}` : '暂无表单字段'}
+                  {type.description || (preview ? `表单字段：${preview}` : '暂无表单字段')}
                 </p>
                 <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 dark:border-slate-700">
                   <span className="text-xs text-slate-400 dark:text-slate-500">
-                    分类：{template.category || '未分类'}
+                    分类：{type.category || '未分类'}
+                    {template ? ` · ${template.name}` : ' · 流程未发布'}
                   </span>
-                  <span className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 opacity-0 transition-opacity group-hover:opacity-100 dark:text-primary-400">
-                    发起申请
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </span>
+                  {defOk && (
+                    <span className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 opacity-0 transition-opacity group-hover:opacity-100 dark:text-primary-400">
+                      发起申请
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </span>
+                  )}
                 </div>
               </button>
             )
@@ -222,13 +251,14 @@ export default function StartProcess() {
             {/* 抽屉头部 */}
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-700">
               <div className="flex items-center gap-3">
-                <span className="text-2xl">{categoryEmoji(selected.category)}</span>
+                <span className="text-2xl">{selected.icon || categoryEmoji(selected.category)}</span>
                 <div>
                   <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
                     {selected.name}
                   </h3>
                   <p className="text-xs text-slate-400 dark:text-slate-500">
-                    {selected.category} · v{selected.version}
+                    {selected.category || '未分类'}
+                    {drawerTemplate ? ` · ${drawerTemplate.name} v${drawerTemplate.version}` : ''}
                   </p>
                 </div>
               </div>
