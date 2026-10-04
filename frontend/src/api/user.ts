@@ -22,8 +22,16 @@ export interface UserRow {
   email?: string | null
   supervisorId?: number | null
   roles?: string[]
+  jobLevelId?: number | null
   status: 'ACTIVE' | 'INACTIVE' | 'LOCKED' | 'DELETED'
   deletedAt?: string | null
+}
+
+export interface JobLevelRow {
+  id: number
+  code: string
+  name: string
+  enabled: boolean
 }
 
 export const userApi = {
@@ -33,4 +41,8 @@ export const userApi = {
   enable: (id: number) => apiClient.post<UserRow>(`/users/${id}/enable`).then((r) => r.data),
   remove: (id: number) => apiClient.delete<UserRow>(`/users/${id}`).then((r) => r.data),
   restore: (id: number) => apiClient.post<UserRow>(`/users/${id}/restore`).then((r) => r.data),
+  update: (id: number, body: { jobLevelId?: number | null; clearJobLevel?: boolean }) =>
+    apiClient.put<UserRow>(`/users/${id}`, body).then((r) => r.data),
+  jobLevels: (all = true) =>
+    apiClient.get<JobLevelRow[]>('/job-levels', { params: { all } }).then((r) => r.data),
 }

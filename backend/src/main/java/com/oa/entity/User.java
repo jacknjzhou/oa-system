@@ -62,6 +62,10 @@ public class User extends BaseEntity {
     @Column(name = "supervisor_id")
     private Long supervisorId;
 
+    /** 职级（job_level.id） */
+    @Column(name = "job_level_id")
+    private Long jobLevelId;
+
     @Enumerated(EnumType.ORDINAL)
     @Column(name = "status", nullable = false)
     private UserStatus status;

@@ -1,9 +1,14 @@
 package com.oa.controller;
 
 import com.oa.dto.ApiResponse;
+import com.oa.dto.JobLevelRequest;
 import com.oa.dto.UserUpdateRequest;
+import com.oa.entity.JobLevel;
+import com.oa.entity.JobTitle;
 import com.oa.entity.Role;
 import com.oa.entity.User;
+import com.oa.repository.JobLevelRepository;
+import com.oa.repository.JobTitleRepository;
 import com.oa.enums.EnableStatus;
 import com.oa.enums.UserStatus;
 import com.oa.repository.RoleRepository;
@@ -40,6 +45,8 @@ public class UserController {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final AuthService authService;
+    private final JobLevelRepository jobLevelRepository;
+    private final JobTitleRepository jobTitleRepository;
 
     @GetMapping("/users")
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
@@ -58,6 +65,7 @@ public class UserController {
             m.put("email", u.getEmail());
             m.put("supervisorId", u.getSupervisorId());
             m.put("roles", u.getRoleCodes());
+            m.put("jobLevelId", u.getJobLevelId());
             m.put("status", u.getStatus() != null ? u.getStatus().name() : null);
             m.put("deletedAt", u.getDeletedAt());
             return m;
@@ -100,6 +108,14 @@ public class UserController {
                     .collect(Collectors.toSet());
             user.setRoles(roles);
         }
+        if (Boolean.TRUE.equals(req.getClearJobLevel())) {
+            user.setJobLevelId(null);
+        } else if (req.getJobLevelId() != null) {
+            if (jobLevelRepository.findById(req.getJobLevelId()).isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "职级不存在");
+            }
+            user.setJobLevelId(req.getJobLevelId());
+        }
         User saved = userRepository.save(user);
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", saved.getId());
@@ -107,7 +123,104 @@ public class UserController {
         m.put("realName", saved.getRealName());
         m.put("supervisorId", saved.getSupervisorId());
         m.put("roles", saved.getRoleCodes());
+        m.put("jobLevelId", saved.getJobLevelId());
         return ApiResponse.success(m);
+    }
+
+    /** 职级列表（?all=1 含已屏蔽）。 */
+    @GetMapping("/job-levels")
+    @Transactional(readOnly = true)
+    public ApiResponse<List<Map<String, Object>>> listJobLevels(
+            @RequestParam(defaultValue = "false") boolean all) {
+        List<JobLevel> levels = all ? jobLevelRepository.findAll()
+                : jobLevelRepository.findByEnabledTrueOrderByCodeAsc();
+        return ApiResponse.success(levels.stream().map(l -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", l.getId());
+            m.put("code", l.getCode());
+            m.put("name", l.getName());
+            m.put("enabled", l.getEnabled());
+            return m;
+        }).toList());
+    }
+
+    /** 职称列表（?all=1 含已屏蔽）。 */
+    @GetMapping("/job-titles")
+    @Transactional(readOnly = true)
+    public ApiResponse<List<Map<String, Object>>> listJobTitles(
+            @RequestParam(defaultValue = "false") boolean all) {
+        List<JobTitle> titles = all ? jobTitleRepository.findAll()
+                : jobTitleRepository.findByEnabledTrueOrderByCodeAsc();
+        return ApiResponse.success(titles.stream().map(t -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", t.getId());
+            m.put("code", t.getCode());
+            m.put("name", t.getName());
+            m.put("enabled", t.getEnabled());
+            return m;
+        }).toList());
+    }
+
+    /** 职级新增/屏蔽。body: {code, name, enabled?} */
+    @PostMapping("/job-levels")
+    @Transactional
+    public ApiResponse<Map<String, Object>> createJobLevel(@RequestBody JobLevelRequest req) {
+        if (req.getCode() == null || req.getCode().isBlank() || req.getName() == null || req.getName().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "编码与名称必填");
+        }
+        String code = req.getCode().trim().toUpperCase();
+        if (jobLevelRepository.findByCode(code).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "编码已存在: " + code);
+        }
+        JobLevel l = new JobLevel();
+        l.setCode(code);
+        l.setName(req.getName().trim());
+        l.setEnabled(req.getEnabled() == null || req.getEnabled());
+        return ApiResponse.success(jobLevelView(jobLevelRepository.save(l)));
+    }
+
+    /** 职级屏蔽/启用。body: {enabled} */
+    @PutMapping("/job-levels/{id}")
+    @Transactional
+    public ApiResponse<Map<String, Object>> updateJobLevel(@PathVariable Long id,
+                                                           @RequestBody JobLevelRequest req) {
+        JobLevel l = jobLevelRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "职级不存在"));
+        if (req.getEnabled() != null) {
+            l.setEnabled(req.getEnabled());
+        }
+        return ApiResponse.success(jobLevelView(jobLevelRepository.save(l)));
+    }
+
+    /** 职称屏蔽/启用。body: {enabled} */
+    @PutMapping("/job-titles/{id}")
+    @Transactional
+    public ApiResponse<Map<String, Object>> updateJobTitle(@PathVariable Long id,
+                                                           @RequestBody JobLevelRequest req) {
+        JobTitle t = jobTitleRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "职称不存在"));
+        if (req.getEnabled() != null) {
+            t.setEnabled(req.getEnabled());
+        }
+        return ApiResponse.success(jobTitleView(jobTitleRepository.save(t)));
+    }
+
+    private Map<String, Object> jobLevelView(JobLevel l) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", l.getId());
+        m.put("code", l.getCode());
+        m.put("name", l.getName());
+        m.put("enabled", l.getEnabled());
+        return m;
+    }
+
+    private Map<String, Object> jobTitleView(JobTitle t) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", t.getId());
+        m.put("code", t.getCode());
+        m.put("name", t.getName());
+        m.put("enabled", t.getEnabled());
+        return m;
     }
 
     /** 禁用：不可登录、待办/通知不可见（重新启用即恢复）。 */

@@ -19,4 +19,8 @@ public class UserUpdateRequest {
 
     /** 角色编码列表（如 ["MANAGER"]）；未传 = 不动 */
     private List<String> roleCodes;
+
+    /** 职级 id；未传 = 不动，clearJobLevel=true = 清除 */
+    private Long jobLevelId;
+    private Boolean clearJobLevel;
 }

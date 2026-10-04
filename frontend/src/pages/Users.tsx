@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { userApi, type UserRow } from '../api/user'
+import { userApi, type JobLevelRow, type UserRow } from '../api/user'
 import EmptyState, { ErrorState, LoadingState } from '../components/EmptyState'
 import { useToast } from '../components/Toast'
 import { getStoredUser } from '../api/auth'
@@ -18,6 +18,7 @@ export default function Users() {
   const me = getStoredUser()
   const [tab, setTab] = useState<'active' | 'recycle'>('active')
   const [rows, setRows] = useState<UserRow[]>([])
+  const [levels, setLevels] = useState<JobLevelRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(0)
@@ -25,9 +26,11 @@ export default function Users() {
   const load = useCallback(() => {
     setLoading(true)
     setError('')
-    userApi
-      .list(tab === 'recycle')
-      .then(setRows)
+    Promise.all([userApi.list(tab === 'recycle'), userApi.jobLevels(true).catch(() => [] as JobLevelRow[])])
+      .then(([u, lv]) => {
+        setRows(u)
+        setLevels(lv)
+      })
       .catch((err) => setError(err instanceof Error ? err.message : '加载失败'))
       .finally(() => setLoading(false))
   }, [tab])
@@ -35,6 +38,23 @@ export default function Users() {
   useEffect(() => {
     load()
   }, [load])
+
+  const changeLevel = async (u: UserRow, levelId: number | null) => {
+    setBusy(u.id)
+    try {
+      await userApi.update(u.id, {
+        jobLevelId: levelId,
+        clearJobLevel: levelId == null,
+        supervisorId: u.supervisorId ?? null,
+      } as Parameters<typeof userApi.update>[1])
+      showToast('已更新职级', 'success')
+      load()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '操作失败', 'error')
+    } finally {
+      setBusy(0)
+    }
+  }
 
   const act = async (id: number, fn: () => Promise<unknown>, msg: string) => {
     if (busy) return
@@ -88,6 +108,7 @@ export default function Users() {
                 <th className="px-4 py-3 font-medium">账号</th>
                 <th className="px-4 py-3 font-medium">姓名</th>
                 <th className="px-4 py-3 font-medium">角色</th>
+                <th className="px-4 py-3 font-medium">职级</th>
                 <th className="px-4 py-3 font-medium">状态</th>
                 <th className="px-4 py-3 font-medium">操作</th>
               </tr>
@@ -105,6 +126,22 @@ export default function Users() {
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
                       {(r.roles || []).join(' / ') || '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <select
+                        disabled={busy !== 0 || r.status === 'DELETED'}
+                        value={r.jobLevelId ?? ''}
+                        onChange={(e) => changeLevel(r, e.target.value ? Number(e.target.value) : null)}
+                        className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700"
+                      >
+                        <option value="">—</option>
+                        {levels.map((lv) => (
+                          <option key={lv.id} value={lv.id}>
+                            {lv.name}
+                            {lv.enabled ? '' : '（已屏蔽）'}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full px-2 py-0.5 text-xs ${meta.cls}`}>{meta.label}</span>
