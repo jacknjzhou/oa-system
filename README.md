@@ -47,6 +47,18 @@
 - **演示账号**（V3/V4 播种）：`admin/admin123`（含总经理与系统管理）、`manager/manager123`、`employee/employee123`、`finance/finance123`
 - 模板 XML 修改后经「流程模板」页面更新并部署新版本，**存量流程实例继续按旧版本跑到结束**（Flowable 语义）
 
+## 审批设置（审批管理/审批类型/模板/表单/流程）
+
+- **审批类型**（`approval_type` 表）：code 稳定键，关联模板；发起页按类型卡片分组；预置 15 类系统审批（请假/报销/出差/采购/加班/外出/补卡/用章/用车/合同/付款/预支/转正/招聘/离职 + 公文），启动 seeder 幂等补种；`business_type` 以 code 字符串落库（V10 字符串化，支持动态类型）
+- **动态表单**：模板 `formConfig` 驱动，19 类控件（单行/多行/数字/金额/日期/日期段/单选/多选/评分/附件/人员/省市等）；「表单配置」页三栏式表单设计器（字段库/字段列表/属性面板）；发起页、审批页、预览均按 formConfig 动态渲染
+- **可视化流程设计器**：模板「流程」页签——节点库（角色/用户/发起人主管/发起人 × 单签/会签/并签）拖排成链，前端生成 BPMN XML 随模板保存；`flowSpec`（JSON）与 `bpmnXml` 同存，模板无流程时 `flowReady=false`（可发布但不可发起，发起报 400）。也支持切「高级模式」直接贴 BPMN XML
+- **发起人主管**：`sys_user.supervisor_id`（用户编辑页可配）；BPMN 用 `candidateUsers=${supervisorUsername}`，`assignSupervisorDelegate` 在流程开始解析（无主管时回退发起人本人）；`launchEngine` 注入 `initiatorId`/`initiatorUsername` 变量，会签/并签节点注入 `flowGroups_<nodeId>` 角色组变量（Flowable JUEL 无法创建列表字面量）
+- **表单操作权限（字段级）**：流程设计器逐字段设置 可编辑/只读/隐藏——发起节点（默认全可编辑）与每个审批节点（默认全只读）独立配置，存于 `flowSpec`；发起页/审批页按当前节点生效（隐藏字段不渲染、不校验）
+- **审批预览**：模板列表「预览」——按 formConfig 只读渲染（必填字段带 *）
+- **审批功能权限**（`approval_permission` 表，V14）：模板 × 角色 × 权限项（申请/查看/管理/编辑），模板列表「权限」弹窗勾选保存（`GET/PUT /api/process-definitions/{id}/permissions`）；功能权限为管理端约束，运行时鉴权见下方生产 TODO
+- **内置模板**：报销（会签/驳回/抄送全特性）+ 请假 + 采购（表单+BPMN+流程规格完整，直接可发起）；seeder 建的模板由 `ProcessDefinitionDeployer` 启动时幂等补部署进引擎
+- **生产 TODO**：功能权限（start/view/manage）尚未在发起/查看接口做运行时拦截（当前为演示信任模型）；审批详情/日志接口未做归属校验
+
 ## 容器化开发与部署
 
 ### 前置条件
