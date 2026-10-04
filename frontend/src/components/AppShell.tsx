@@ -41,6 +41,11 @@ const NAV_ITEMS: NavItem[] = [
     icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
   },
   {
+    to: '/leave',
+    label: '我的假期',
+    icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+  },
+  {
     to: '/approval-types',
     label: '审批类型',
     icon: 'M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z',
@@ -69,6 +74,7 @@ function pageTitle(pathname: string): string {
   if (pathname.startsWith('/approval-types')) return '审批类型'
   if (pathname.startsWith('/cc')) return '抄送给我'
   if (pathname.startsWith('/attendance')) return '考勤打卡'
+  if (pathname.startsWith('/leave')) return '我的假期'
   if (pathname.startsWith('/documents/')) return '公文详情'
   if (pathname.startsWith('/documents')) return '公文'
   return '发起审批'

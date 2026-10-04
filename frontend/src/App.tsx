@@ -9,6 +9,7 @@ import ProcessTracking from './pages/ProcessTracking'
 import MyInstances from './pages/MyInstances'
 import CcList from './pages/CcList'
 import Attendance from './pages/Attendance'
+import Leave from './pages/Leave'
 import DocumentList from './pages/DocumentList'
 import DocumentDetail from './pages/DocumentDetail'
 import TemplateList from './pages/TemplateList'
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/my-instances" element={<MyInstances />} />
         <Route path="/cc" element={<CcList />} />
         <Route path="/attendance" element={<Attendance />} />
+        <Route path="/leave" element={<Leave />} />
         <Route path="/documents" element={<DocumentList />} />
         <Route path="/documents/:id" element={<DocumentDetail />} />
         <Route path="/approval-types" element={<ApprovalTypes />} />

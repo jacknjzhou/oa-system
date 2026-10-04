@@ -13,7 +13,8 @@ function formatMinutes(min: number): string {
 
 function formatClock(iso: string | null): string {
   if (!iso) return '—'
-  return formatDateTime(iso).slice(-8, -2) || formatDateTime(iso)
+  const s = formatDateTime(iso)
+  return s.includes(' ') ? s.split(' ')[1] : s
 }
 
 /** 考勤打卡（AT-01）：今日打卡 + 月度统计。 */
