@@ -78,13 +78,21 @@ Docker + Docker Compose v2。
 
 ```bash
 # 构建镜像并后台启动全部服务（后端 jar 在容器内编译，无需本地 Maven）
-docker compose up -d --build
+./build.sh            # = backend+frontend 全部
+./build.sh backend    # 只重建后端
+./build.sh up         # 只启动（用已有镜像）
+./build.sh down       # 停止（保留数据卷）
 
-# 等待就绪（健康检查：MySQL 5.7/8.x、backend /actuator/health、frontend /）
-docker compose ps
+docker compose ps     # 查看服务状态（健康检查：MySQL、backend /actuator/health、frontend /）
 ```
 
-前端 http://localhost:8081 ，后端 API http://localhost:8080/api 。
+前端 http://localhost:80 ，后端 API http://localhost:8080/api 。
+
+> **云同步目录注意**：仓库放在 Synology Drive / OneDrive 等云同步文件夹时，
+> `docker compose up --build` 会卡死在 `load build context`（虚化文件的
+> `lseek(SEEK_HOLE)` 触发 NAS 下载，网络抖动即无限挂起）。
+> `build.sh` 会先把代码 rsync 到本地盘（`/tmp/oa-build`，可用 `OA_BUILD_DIR` 覆盖）再构建，
+> 已规避此问题；**请不要直接用 `up --build`**。
 
 ### 常用运维命令
 
