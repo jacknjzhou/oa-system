@@ -740,9 +740,9 @@ public class ProcessService {
                 ? def.getCreator().getRealName() : (def.getCreator() != null ? def.getCreator().getUsername() : null));
         dto.setPublishedAt(def.getPublishedAt() != null ? def.getPublishedAt().format(TS) : null);
         dto.setFlowReady(hasText(def.getBpmnXml()));
+        dto.setFlowSpec(def.getFlowSpec());
         if (withXml) {
             dto.setBpmnXml(def.getBpmnXml());
-            dto.setFlowSpec(def.getFlowSpec());
         }
         return dto;
     }
