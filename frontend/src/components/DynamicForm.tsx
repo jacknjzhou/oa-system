@@ -11,6 +11,11 @@ interface DynamicFormProps {
   readOnly?: boolean
   /** 用户目录（contact 控件选人用） */
   users?: UserSummary[]
+  /**
+   * 字段级节点权限（P2-3 表单操作权限，来自 flowSpec）：
+   * editable 可编辑 / readonly 只读 / hidden 隐藏（不渲染）
+   */
+  perms?: Record<string, 'editable' | 'readonly' | 'hidden'>
 }
 
 /** 复合值拆解：dateRange "a ~ b" / provinceCity "a / b" */
@@ -25,8 +30,9 @@ function splitComposite(raw: string, sep: string): [string, string] {
  * 动态表单（P2-1b 底座）：按模板 formConfig 渲染 19 类控件。
  * 复合控件（dateRange/provinceCity）以 "a ~ b" / "a / b" 字符串存储，保持 values 扁平。
  */
-export default function DynamicForm({ fields, values, onChange, disabled, readOnly, users }: DynamicFormProps) {
-  if (fields.length === 0) {
+export default function DynamicForm({ fields, values, onChange, disabled, readOnly, users, perms }: DynamicFormProps) {
+  const visible = fields.filter((f) => perms?.[f.key] !== 'hidden')
+  if (visible.length === 0) {
     return (
       <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
         该模板未配置表单字段
@@ -38,21 +44,26 @@ export default function DynamicForm({ fields, values, onChange, disabled, readOn
 
   return (
     <div className="space-y-4">
-      {fields.map((field) => (
-        <div key={field.key}>
-          <label className="form-label" htmlFor={`form-field-${field.key}`}>
-            {field.label || field.key}
-            {field.required && <span className="ml-0.5 text-red-500">*</span>}
-          </label>
-          {readOnly ? (
-            <p className="min-h-[36px] text-sm text-slate-700 dark:text-slate-300">
-              {values[field.key] ? renderReadOnly(field) : <span className="text-slate-400">-</span>}
-            </p>
-          ) : (
-            renderControl(field)
-          )}
-        </div>
-      ))}
+      {visible.map((field) => {
+        // 字段级权限优先于全局只读；未设置的字段随全局上下文（发起可编辑/审批只读）
+        const fieldReadOnly =
+          perms && field.key in perms ? perms[field.key] === 'readonly' : !!readOnly
+        return (
+          <div key={field.key}>
+            <label className="form-label" htmlFor={`form-field-${field.key}`}>
+              {field.label || field.key}
+              {field.required && <span className="ml-0.5 text-red-500">*</span>}
+            </label>
+            {fieldReadOnly ? (
+              <p className="min-h-[36px] text-sm text-slate-700 dark:text-slate-300">
+                {values[field.key] ? renderReadOnly(field) : <span className="text-slate-400">-</span>}
+              </p>
+            ) : (
+              renderControl(field)
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 

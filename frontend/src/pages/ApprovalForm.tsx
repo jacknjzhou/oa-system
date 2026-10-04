@@ -47,6 +47,7 @@ export default function ApprovalForm() {
 
   const [detail, setDetail] = useState<TaskDetail | null>(null)
   const [formFields, setFormFields] = useState<FormField[] | null>(null)
+  const [formPerms, setFormPerms] = useState<Record<string, 'editable' | 'readonly' | 'hidden'> | undefined>(undefined)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
 
@@ -70,8 +71,19 @@ export default function ApprovalForm() {
       try {
         const template = await getTemplate(taskDetail.instance.defId)
         setFormFields(parseFormConfig(template.formConfig).fields)
+        // 当前节点的字段级权限（P2-3 表单操作权限）
+        if (template.flowSpec) {
+          try {
+            const parsed = JSON.parse(template.flowSpec) as { nodes?: Array<{ id: string; fieldPerms?: Record<string, 'editable' | 'readonly' | 'hidden'> }> }
+            const node = (parsed.nodes ?? []).find((n) => n.id === taskDetail.task.nodeKey)
+            setFormPerms(node?.fieldPerms)
+          } catch {
+            setFormPerms(undefined)
+          }
+        }
       } catch {
         setFormFields(null)
+        setFormPerms(undefined)
       }
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : '任务加载失败')
@@ -208,7 +220,7 @@ export default function ApprovalForm() {
   return (
     <div className="mx-auto max-w-5xl space-y-5 p-6">
       {/* 实例信息卡 */}
-      <InstanceInfoCard instance={instance} formFields={formFields} />
+      <InstanceInfoCard instance={instance} formFields={formFields} perms={formPerms} />
 
       {/* 任务信息 */}
       <div className="card p-5">

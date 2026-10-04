@@ -1,4 +1,4 @@
-import type { FormField, InstanceDTO } from '../types'
+import type { FieldPerm, FormField, InstanceDTO } from '../types'
 import StatusBadge, { PriorityBadge } from './Badge'
 import { formatDateTime, parseBusinessData } from '../utils/format'
 
@@ -6,14 +6,16 @@ interface InstanceInfoCardProps {
   instance: InstanceDTO
   /** 模板表单字段配置（用于将 businessData 按键值展示），null 表示未能获取 */
   formFields: FormField[] | null
+  /** 当前节点的字段级权限（P2-3）：hidden 字段不展示 */
+  perms?: Record<string, FieldPerm>
 }
 
 /**
  * 流程实例信息卡：标题 / 发起人 / 状态 / 业务数据（按 formConfig 键值展示）
  */
-export default function InstanceInfoCard({ instance, formFields }: InstanceInfoCardProps) {
+export default function InstanceInfoCard({ instance, formFields, perms }: InstanceInfoCardProps) {
   const businessData = parseBusinessData(instance.businessData)
-  const dataEntries = Object.entries(businessData)
+  const dataEntries = Object.entries(businessData).filter(([key]) => perms?.[key] !== 'hidden')
 
   return (
     <div className="card p-5">

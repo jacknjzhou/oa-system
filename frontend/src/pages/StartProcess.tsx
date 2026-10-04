@@ -133,6 +133,16 @@ export default function StartProcess() {
 
   const drawerTemplate = selected ? templateFor(selected) : null
   const drawerFields = drawerTemplate ? parseFormConfig(drawerTemplate.formConfig).fields : []
+  // 发起人节点字段权限（P2-3：flowSpec.initiatorPerms；默认全部可编辑）
+  const drawerPerms = useMemo(() => {
+    if (!drawerTemplate?.flowSpec) return undefined
+    try {
+      const parsed = JSON.parse(drawerTemplate.flowSpec) as { initiatorPerms?: Record<string, 'editable' | 'readonly' | 'hidden'> }
+      return parsed.initiatorPerms
+    } catch {
+      return undefined
+    }
+  }, [drawerTemplate])
 
   return (
     <div className="mx-auto max-w-6xl p-6">
@@ -302,6 +312,7 @@ export default function StartProcess() {
                 onChange={handleValueChange}
                 disabled={submitting}
                 users={ccUsers}
+                perms={drawerPerms}
               />
               <div>
                 <span className="form-label">抄送人（可选）</span>

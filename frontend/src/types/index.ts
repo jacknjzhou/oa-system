@@ -90,6 +90,9 @@ export type FlowApproverType = 'role' | 'user' | 'supervisor' | 'initiator'
 /** 签署模式：单签（一人通过）/ 会签（全部通过）/ 并签（任一人通过） */
 export type FlowSignMode = 'single' | 'countersign' | 'cosign'
 
+/** 字段操作权限（P2-3 表单操作权限）：可编辑 / 只读 / 隐藏 */
+export type FieldPerm = 'editable' | 'readonly' | 'hidden'
+
 export interface FlowNodeSpec {
   id: string
   name: string
@@ -100,10 +103,14 @@ export interface FlowNodeSpec {
   userId?: number | null
   username?: string | null
   signMode: FlowSignMode
+  /** 表单字段权限（fieldKey → editable/readonly/hidden）；未设置默认全部只读 */
+  fieldPerms?: Record<string, FieldPerm>
 }
 
 export interface FlowSpec {
   nodes: FlowNodeSpec[]
+  /** 发起人节点的字段权限；未设置默认全部可编辑 */
+  initiatorPerms?: Record<string, FieldPerm>
 }
 
 // ========== 表单配置 ==========

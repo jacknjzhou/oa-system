@@ -1,10 +1,12 @@
 package com.oa.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.oa.dto.ApprovalPermissionRequest;
 import com.oa.dto.DefinitionDTO;
 import com.oa.dto.InstanceDTO;
 import com.oa.dto.ProcessDefinitionRequest;
 import com.oa.dto.ProcessStartRequest;
+import com.oa.entity.ApprovalPermission;
 import com.oa.entity.ApprovalRecord;
 import com.oa.entity.ProcessDefinition;
 import com.oa.entity.ProcessInstance;
@@ -16,6 +18,7 @@ import com.oa.enums.ProcessDefinitionStatus;
 import com.oa.enums.ProcessInstanceStatus;
 import com.oa.enums.RefType;
 import com.oa.entity.Role;
+import com.oa.repository.ApprovalPermissionRepository;
 import com.oa.repository.ApprovalRecordRepository;
 import com.oa.repository.CcRecordRepository;
 import com.oa.repository.ProcessDefinitionRepository;
@@ -36,6 +39,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -59,6 +63,7 @@ public class ProcessService {
     private final ProcessInstanceRepository instanceRepository;
     private final ApprovalRecordRepository approvalRecordRepository;
     private final CcRecordRepository ccRecordRepository;
+    private final ApprovalPermissionRepository approvalPermissionRepository;
     private final RoleRepository roleRepository;
     private final AuthService authService;
     private final NotificationService notificationService;
@@ -777,6 +782,59 @@ public class ProcessService {
         } catch (Exception e) {
             log.warn("flowSpec 解析失败，跳过会签名单变量注入: {}", e.getMessage());
         }
+    }
+
+    // ==================== 审批功能权限（P2-3）====================
+
+    private static final Set<String> PERMS = Set.of("start", "view", "manage", "edit");
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> listPermissions(Long defId) {
+        ProcessDefinition def = definitionRepository.findById(defId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "模板不存在"));
+        return approvalPermissionRepository.findByDefId(defId).stream()
+                .sorted(Comparator.comparing(ApprovalPermission::getRoleCode)
+                        .thenComparing(ApprovalPermission::getPerm))
+                .map(p -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("roleCode", p.getRoleCode());
+                    m.put("defName", p.getDefName() != null ? p.getDefName() : def.getName());
+                    m.put("perm", p.getPerm());
+                    return m;
+                })
+                .toList();
+    }
+
+    @Transactional
+    public Map<String, Object> savePermissions(Long defId, List<ApprovalPermissionRequest> reqs) {
+        ProcessDefinition def = definitionRepository.findById(defId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "模板不存在"));
+        approvalPermissionRepository.deleteByDefId(defId);
+        List<ApprovalPermission> rows = new ArrayList<>();
+        for (ApprovalPermissionRequest req : reqs) {
+            if (req.getRoleCode() == null || req.getRoleCode().isBlank()) {
+                continue;
+            }
+            roleRepository.findByRoleCode(req.getRoleCode())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "角色不存在: " + req.getRoleCode()));
+            for (String perm : req.getPerms() == null ? List.<String>of() : req.getPerms()) {
+                if (!PERMS.contains(perm)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "未知权限项: " + perm);
+                }
+                ApprovalPermission row = new ApprovalPermission();
+                row.setDefId(defId);
+                row.setDefName(def.getName());
+                row.setRoleCode(req.getRoleCode());
+                row.setPerm(perm);
+                rows.add(row);
+            }
+        }
+        approvalPermissionRepository.saveAll(rows);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("defId", defId);
+        result.put("count", rows.size());
+        return result;
     }
 
     /**

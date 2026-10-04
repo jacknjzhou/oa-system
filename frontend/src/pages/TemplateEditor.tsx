@@ -51,6 +51,7 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
   const [roles, setRoles] = useState<Role[]>([])
   const [users, setUsers] = useState<UserSummary[]>([])
   const [flowNodes, setFlowNodes] = useState<FlowNodeSpec[]>([])
+  const [initiatorPerms, setInitiatorPerms] = useState<Record<string, 'editable' | 'readonly' | 'hidden'>>({})
   /** 流程来源：可视化设计生成 / 高级 bpmn-js 手绘 */
   const [flowSource, setFlowSource] = useState<'visual' | 'bpmn'>('visual')
   const [loading, setLoading] = useState(mode === 'edit')
@@ -108,9 +109,15 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
         setXmlToImport(data.bpmnXml || buildInitialBpmnXml(data.defKey, data.name))
         if (data.flowSpec) {
           try {
-            const parsed = JSON.parse(data.flowSpec) as { nodes?: FlowNodeSpec[] }
+            const parsed = JSON.parse(data.flowSpec) as {
+              nodes?: FlowNodeSpec[]
+              initiatorPerms?: Record<string, 'editable' | 'readonly' | 'hidden'>
+            }
             if (Array.isArray(parsed.nodes) && parsed.nodes.length > 0) {
               setFlowNodes(parsed.nodes)
+            }
+            if (parsed.initiatorPerms) {
+              setInitiatorPerms(parsed.initiatorPerms)
             }
           } catch {
             // flowSpec 损坏时回退高级模式
@@ -255,7 +262,10 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
       const { xml } = await modeler.saveXML({ format: true })
       // process id 必须等于 defKey（后端按 key 发起流程）
       const modelerXml = syncProcessId(xml || '', defKey.trim())
-      const flowSpecJson = JSON.stringify({ nodes: flowNodes })
+      const flowSpecJson = JSON.stringify({
+        nodes: flowNodes,
+        ...(Object.keys(initiatorPerms).length > 0 ? { initiatorPerms } : {}),
+      })
       // 流程来源：可视化设计有节点 → 用生成 XML；否则用 bpmn-js 画布 XML
       const finalXml =
         flowSource === 'visual' && flowNodes.length > 0
@@ -397,7 +407,15 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
           <div ref={containerRef} className="h-full w-full" />
           {tab === 'flow' && flowSource === 'visual' && (
             <div className="absolute inset-0 z-20 bg-white dark:bg-slate-800">
-              <FlowDesigner spec={flowNodes} onChange={setFlowNodes} roles={roles} users={users} />
+              <FlowDesigner
+                spec={flowNodes}
+                onChange={setFlowNodes}
+                roles={roles}
+                users={users}
+                fields={fields}
+                initiatorPerms={initiatorPerms}
+                onInitiatorPermsChange={setInitiatorPerms}
+              />
             </div>
           )}
           {tab === 'flow' && flowSource === 'bpmn' && (

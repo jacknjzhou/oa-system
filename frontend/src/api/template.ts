@@ -38,3 +38,26 @@ export async function disableTemplate(id: string): Promise<Template> {
   const response = await apiClient.post<Template>(`/process-definitions/${id}/disable`)
   return response.data
 }
+
+export interface ApprovalPermissionRow {
+  roleCode: string
+  defName?: string
+  perm: 'start' | 'view' | 'manage' | 'edit'
+}
+
+export interface ApprovalPermissionPayload {
+  roleCode: string
+  perms: string[]
+}
+
+/** 审批功能权限列表（P2-3） */
+export async function getTemplatePermissions(id: string): Promise<ApprovalPermissionRow[]> {
+  const response = await apiClient.get<ApprovalPermissionRow[]>(`/process-definitions/${id}/permissions`)
+  return response.data
+}
+
+/** 保存审批功能权限（整体替换） */
+export async function saveTemplatePermissions(id: string, rows: ApprovalPermissionPayload[]): Promise<{ defId: string; count: number }> {
+  const response = await apiClient.put<{ defId: string; count: number }>(`/process-definitions/${id}/permissions`, rows)
+  return response.data
+}

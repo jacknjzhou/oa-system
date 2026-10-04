@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { FlowApproverType, FlowNodeSpec, FlowSignMode, Role, UserSummary } from '../types'
+import type { FieldPerm, FlowApproverType, FlowNodeSpec, FlowSignMode, FormField, Role, UserSummary } from '../types'
 
 /**
  * 可视化流程设计器（P2-2）：三栏式
@@ -12,6 +12,11 @@ interface FlowDesignerProps {
   onChange: (nodes: FlowNodeSpec[]) => void
   roles: Role[]
   users: UserSummary[]
+  /** 表单字段（表单操作权限配置用） */
+  fields?: FormField[]
+  /** 发起人节点的字段权限 */
+  initiatorPerms?: Record<string, FieldPerm>
+  onInitiatorPermsChange?: (perms: Record<string, FieldPerm>) => void
 }
 
 const APPROVER_LABELS: Record<FlowApproverType, string> = {
@@ -33,7 +38,43 @@ function newId(): string {
   return `node_${Date.now().toString(36)}_${seq}`
 }
 
-export default function FlowDesigner({ spec, onChange, roles, users }: FlowDesignerProps) {
+export default function FlowDesigner({ spec, onChange, roles, users, fields, initiatorPerms, onInitiatorPermsChange }: FlowDesignerProps) {
+  const [permTab, setPermTab] = useState<'node' | 'initiator'>('node')
+
+  const fieldPermList = (context: 'node' | 'initiator') => (
+    <div className="space-y-1.5">
+      {(fields ?? []).length === 0 && <p className="text-xs text-slate-400">模板尚未配置表单字段（先在「表单配置」添加）</p>}
+      {(fields ?? []).map((f) => {
+        const isInitiator = context === 'initiator'
+        const current = isInitiator
+          ? (initiatorPerms?.[f.key] ?? 'editable')
+          : (selected?.fieldPerms?.[f.key] ?? 'readonly')
+        const handle = (perm: FieldPerm) => {
+          if (isInitiator) {
+            onInitiatorPermsChange?.({ ...(initiatorPerms ?? {}), [f.key]: perm })
+          } else if (selected) {
+            update(selected.id, { fieldPerms: { ...(selected.fieldPerms ?? {}), [f.key]: perm } })
+          }
+        }
+        return (
+          <div key={f.key} className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-sm text-slate-700 dark:text-slate-200">
+              {f.label || f.key}
+            </span>
+            <select
+              className="w-24 rounded border border-slate-300 bg-white px-1.5 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
+              value={current}
+              onChange={(e) => handle(e.target.value as FieldPerm)}
+            >
+              <option value="editable">可编辑</option>
+              <option value="readonly">只读</option>
+              <option value="hidden">隐藏</option>
+            </select>
+          </div>
+        )
+      })}
+    </div>
+  )
   const [selectedId, setSelectedId] = useState<string | null>(spec[0]?.id ?? null)
   const selected = spec.find((n) => n.id === selectedId) ?? null
 
@@ -89,8 +130,20 @@ export default function FlowDesigner({ spec, onChange, roles, users }: FlowDesig
           <p>· 节点自上而下依次审批</p>
           <p className="mt-1">· 审批人：角色 / 用户 / 发起人主管 / 发起人</p>
           <p className="mt-1">· 签署：单签 / 会签 / 并签（仅角色可选）</p>
-          <p className="mt-1">· 流程开始（发起）与结束固定</p>
+          <p className="mt-1">· 每个节点可逐字段设置 可编辑/只读/隐藏</p>
         </div>
+        <button
+          type="button"
+          onClick={() => setPermTab('initiator')}
+          className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+            permTab === 'initiator'
+              ? 'border-primary-400 bg-primary-50 text-primary-700 dark:bg-primary-500/15 dark:text-primary-400'
+              : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-600 dark:text-slate-400'
+          }`}
+        >
+          发起人字段权限（默认全部可编辑）
+        </button>
+        {permTab === 'initiator' && <div className="mt-2">{fieldPermList('initiator')}</div>}
       </aside>
 
       {/* 中：节点链 */}
@@ -276,6 +329,11 @@ export default function FlowDesigner({ spec, onChange, roles, users }: FlowDesig
                 审批人 = 发起人的直属主管（在员工管理中维护），无主管时回退给发起人本人。
               </p>
             )}
+
+            <div>
+              <label className="form-label">表单操作权限（未设置默认全部只读）</label>
+              {fieldPermList('node')}
+            </div>
 
             {selected.approverType === 'role' && (
               <div>

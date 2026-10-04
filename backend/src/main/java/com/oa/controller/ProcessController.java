@@ -1,6 +1,7 @@
 package com.oa.controller;
 
 import com.oa.dto.ApiResponse;
+import com.oa.dto.ApprovalPermissionRequest;
 import com.oa.dto.DefinitionDTO;
 import com.oa.dto.InstanceDTO;
 import com.oa.dto.ProcessDefinitionRequest;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Map;
 
 @RestController
@@ -55,6 +57,17 @@ public class ProcessController {
     @PostMapping("/process-definitions/{id}/publish")
     public ApiResponse<DefinitionDTO> publishDefinition(@PathVariable Long id) {
         return ApiResponse.success(processService.publish(id));
+    }
+
+    @GetMapping("/process-definitions/{id}/permissions")
+    public ApiResponse<List<Map<String, Object>>> listPermissions(@PathVariable Long id) {
+        return ApiResponse.success(processService.listPermissions(id));
+    }
+
+    @PutMapping("/process-definitions/{id}/permissions")
+    public ApiResponse<Map<String, Object>> savePermissions(
+            @PathVariable Long id, @RequestBody List<ApprovalPermissionRequest> reqs) {
+        return ApiResponse.success(processService.savePermissions(id, reqs));
     }
 
     @PostMapping("/process-definitions/{id}/disable")
