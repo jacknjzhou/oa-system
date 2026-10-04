@@ -41,6 +41,8 @@ public class TaskDTO {
     /** 紧急度：0=普通，1=重要，2=紧急 */
     private Integer priority;
 
+    private Long initiatorId;
+
     private String initiatorName;
 
     /** PENDING / COMPLETED / REJECTED */

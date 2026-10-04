@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { InstanceDTO } from '../types'
-import { getMyInstances, submitInstance } from '../api/process'
+import { getMyInstances, submitInstance, withdrawInstance } from '../api/process'
 import StatusBadge, { PriorityBadge } from '../components/Badge'
 import EmptyState, { ErrorState, LoadingState } from '../components/EmptyState'
 import { useToast } from '../components/Toast'
@@ -29,6 +29,7 @@ export default function MyInstances() {
   const [loadError, setLoadError] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
   const [submittingId, setSubmittingId] = useState<string | null>(null)
+  const [withdrawingId, setWithdrawingId] = useState<string | null>(null)
 
   const loadInstances = useCallback(() => {
     setLoading(true)
@@ -57,6 +58,20 @@ export default function MyInstances() {
       showToast(err instanceof Error ? err.message : '提交失败', 'error')
     } finally {
       setSubmittingId(null)
+    }
+  }
+
+  const handleWithdraw = async (id: string, title: string) => {
+    if (!window.confirm(`确定撤回流程「${title}」？撤回后审批终止。`)) return
+    setWithdrawingId(id)
+    try {
+      await withdrawInstance(id)
+      showToast('流程已撤回', 'success')
+      loadInstances()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '撤回失败', 'error')
+    } finally {
+      setWithdrawingId(null)
     }
   }
 
@@ -159,12 +174,33 @@ export default function MyInstances() {
                     {submittingId === instance.id ? '提交中…' : '提交草稿'}
                   </span>
                 ) : (
-                  <span className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-primary-600 dark:text-primary-400">
-                    跟踪详情
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </span>
+                  <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
+                    {(instance.status === 'RUNNING' || instance.status === 'REJECTED') && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-700 hover:bg-rose-100 dark:border-rose-500/50 dark:bg-rose-500/10 dark:text-rose-400"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleWithdraw(instance.id, instance.title)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.stopPropagation()
+                            handleWithdraw(instance.id, instance.title)
+                          }
+                        }}
+                      >
+                        {withdrawingId === instance.id ? '撤回中…' : '撤回'}
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 dark:text-primary-400">
+                      跟踪详情
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </span>
+                  </div>
                 )}
               </div>
             </button>

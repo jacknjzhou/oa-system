@@ -144,4 +144,36 @@ public class NotificationService {
             }
         }
     }
+
+    /** 催办专用：与 {@link #notifyTaskHolders} 相同的接收人，但不走引用去重（每次催办都产生新通知）。 */
+    @Transactional
+    public void remindTaskHolders(org.flowable.task.api.Task task, String title, String content, String refId) {
+        if (task == null) {
+            return;
+        }
+        List<User> recipients = new java.util.ArrayList<>();
+        if (task.getAssignee() != null) {
+            userRepository.findByUsername(task.getAssignee()).ifPresent(recipients::add);
+        } else {
+            List<String> groupIds = taskService.getIdentityLinksForTask(task.getId()).stream()
+                    .map(IdentityLink::getGroupId)
+                    .filter(g -> g != null && !g.isBlank())
+                    .distinct()
+                    .toList();
+            for (String role : groupIds) {
+                recipients.addAll(userRepository.findByRolesRoleCode(role));
+            }
+        }
+        for (User u : recipients) {
+            Notification n = new Notification();
+            n.setUser(u);
+            n.setTitle(title);
+            n.setContent(content);
+            n.setNotifyType(NotifyType.TASK);
+            n.setRefType(RefType.TASK);
+            n.setRefId(refId);
+            n.setIsRead(false);
+            notificationRepository.save(n);
+        }
+    }
 }

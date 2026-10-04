@@ -31,6 +31,12 @@ export async function cancelInstance(id: string): Promise<InstanceDTO> {
   return response.data
 }
 
+/** 撤回：发起人终止自己发起的流程（运行中/已拒绝均可） */
+export async function withdrawInstance(id: string): Promise<InstanceDTO> {
+  const response = await apiClient.post<InstanceDTO>(`/process-instances/${id}/withdraw`)
+  return response.data
+}
+
 /** 提交草稿（DRAFT → RUNNING），仅发起人 */
 export async function submitInstance(id: string): Promise<InstanceDTO> {
   const response = await apiClient.post<InstanceDTO>(`/process-instances/${id}/submit`)

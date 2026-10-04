@@ -435,6 +435,42 @@ public class ProcessService {
         return toInstanceDto(instance);
     }
 
+    /**
+     * 撤回：发起人终止自己发起的流程。与 cancel 的区别：
+     * 被拒绝（REJECTED）的实例也可撤回（改判为已撤回）；已完成/草稿/已撤回不可。
+     */
+    @Transactional
+    public InstanceDTO withdrawInstance(Long id) {
+        ProcessInstance instance = loadInstance(id);
+        User operator = authService.getCurrentUser();
+        if (!instance.getInitiator().getId().equals(operator.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅发起人可撤回流程");
+        }
+        if (instance.getStatus() == ProcessInstanceStatus.DRAFT) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "草稿请先提交，无需撤回");
+        }
+        if (instance.getStatus() != ProcessInstanceStatus.RUNNING
+                && instance.getStatus() != ProcessInstanceStatus.REJECTED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "仅运行中或已拒绝的流程可撤回");
+        }
+        if (instance.getFlowableInstanceId() != null
+                && runtimeService.createProcessInstanceQuery()
+                        .processInstanceId(instance.getFlowableInstanceId()).count() > 0) {
+            runtimeService.deleteProcessInstance(instance.getFlowableInstanceId(), "发起人撤回");
+        }
+        instance.setStatus(ProcessInstanceStatus.CANCELLED);
+        instance.setCurrentNode(null);
+        instance.setCompletedAt(LocalDateTime.now());
+        instance = instanceRepository.save(instance);
+
+        recordApproval(instance, null, null, null,
+                ApprovalAction.CANCEL, operator, "撤回流程", null, null);
+        notificationService.notify(instance.getInitiator(), "流程已撤回",
+                "流程【" + instance.getTitle() + "】已被您撤回。",
+                NotifyType.PROCESS, RefType.PROCESS_INSTANCE, String.valueOf(instance.getId()));
+        return toInstanceDto(instance);
+    }
+
     @Transactional(readOnly = true)
     public List<InstanceDTO> listMyInstances() {
         User current = authService.getCurrentUser();
@@ -671,8 +707,12 @@ public class ProcessService {
         return dto;
     }
 
+    /**
+     * 单号：PI + 时间戳（含毫秒）+ 3 位随机数。
+     * 同秒内多次发起（测试批量造单 / 高并发）时秒级时间戳会碰撞，含毫秒后碰撞概率可忽略。
+     */
     private String generateInstanceNo() {
-        return "PI" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
-                + String.format("%04d", ThreadLocalRandom.current().nextInt(10000));
+        return "PI" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"))
+                + String.format("%03d", ThreadLocalRandom.current().nextInt(1000));
     }
 }

@@ -80,6 +80,12 @@ public class ProcessController {
         return ApiResponse.success(processService.listCcInstances());
     }
 
+    /** 撤回：发起人终止自己发起的流程（运行中/已拒绝均可）。 */
+    @PostMapping("/process-instances/{id}/withdraw")
+    public ApiResponse<InstanceDTO> withdraw(@PathVariable Long id) {
+        return ApiResponse.success(processService.withdrawInstance(id));
+    }
+
     @GetMapping("/process-instances/{id}")
     public ApiResponse<Map<String, Object>> getInstance(@PathVariable Long id) {
         return ApiResponse.success(processService.getInstance(id));

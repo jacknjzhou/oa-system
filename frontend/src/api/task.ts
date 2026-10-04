@@ -47,3 +47,8 @@ export async function transferTask(
 ): Promise<void> {
   await apiClient.post(`/tasks/${id}/transfer`, payload)
 }
+
+/** 催办：发起人提醒当前审批人（可重复） */
+export async function remindTask(id: string): Promise<void> {
+  await apiClient.post(`/tasks/${id}/remind`)
+}

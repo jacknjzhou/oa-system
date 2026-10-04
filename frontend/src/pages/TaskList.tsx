@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { TaskDTO } from '../types'
-import { getDoneTasks, getTodoTasks } from '../api/task'
+import { getDoneTasks, getTodoTasks, remindTask } from '../api/task'
+import { withdrawInstance } from '../api/process'
+import { getStoredUser } from '../api/auth'
 import StatusBadge, { PriorityBadge } from '../components/Badge'
 import EmptyState, { ErrorState, LoadingState } from '../components/EmptyState'
 import { useToast } from '../components/Toast'
@@ -14,33 +16,63 @@ interface TaskListProps {
 export default function TaskList({ mode }: TaskListProps) {
   const navigate = useNavigate()
   const { showToast } = useToast()
+  const user = getStoredUser()
   const [tasks, setTasks] = useState<TaskDTO[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
+  const [acting, setActing] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
+  const loadTasks = useCallback(() => {
     setLoading(true)
     setLoadError('')
     const request = mode === 'todo' ? getTodoTasks() : getDoneTasks()
     request
-      .then((data) => {
-        if (!cancelled) setTasks(data)
-      })
+      .then((data) => setTasks(data))
       .catch((err) => {
-        if (!cancelled) {
-          const message = err instanceof Error ? err.message : '任务加载失败'
-          setLoadError(message)
-          showToast(message, 'error')
-        }
+        const message = err instanceof Error ? err.message : '任务加载失败'
+        setLoadError(message)
+        showToast(message, 'error')
       })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
+      .finally(() => setLoading(false))
   }, [mode, showToast])
+
+  useEffect(() => {
+    loadTasks()
+  }, [loadTasks])
+
+  /** 仅发起人可见催办/撤回 */
+  const isInitiator = (task: TaskDTO) =>
+    !!user && task.initiatorId != null && String(user.id) === String(task.initiatorId)
+
+  const handleRemind = async (e: React.MouseEvent, task: TaskDTO) => {
+    e.stopPropagation()
+    if (acting) return
+    setActing(true)
+    try {
+      await remindTask(task.id)
+      showToast('已提醒审批人尽快处理', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '催办失败', 'error')
+    } finally {
+      setActing(false)
+    }
+  }
+
+  const handleWithdraw = async (e: React.MouseEvent, task: TaskDTO) => {
+    e.stopPropagation()
+    if (acting) return
+    if (!window.confirm(`确定撤回流程「${task.title}」？撤回后审批终止。`)) return
+    setActing(true)
+    try {
+      await withdrawInstance(task.instanceId)
+      showToast('流程已撤回', 'success')
+      loadTasks()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '撤回失败', 'error')
+    } finally {
+      setActing(false)
+    }
+  }
 
   return (
     <div className="mx-auto max-w-5xl p-6">
@@ -102,6 +134,24 @@ export default function TaskList({ mode }: TaskListProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                   </svg>
                 </span>
+                {mode === 'todo' && isInitiator(task) && (
+                  <div className="mt-2 flex justify-end gap-2">
+                    <span
+                      role="button"
+                      className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 hover:bg-amber-100 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-400"
+                      onClick={(e) => handleRemind(e, task)}
+                    >
+                      🔔 催办
+                    </span>
+                    <span
+                      role="button"
+                      className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-700 hover:bg-rose-100 dark:border-rose-500/50 dark:bg-rose-500/10 dark:text-rose-400"
+                      onClick={(e) => handleWithdraw(e, task)}
+                    >
+                      撤回
+                    </span>
+                  </div>
+                )}
               </div>
             </button>
           ))}

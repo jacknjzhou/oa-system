@@ -216,6 +216,26 @@ public class TaskService {
         return toDtoFromHistory(id);
     }
 
+    /** 催办：发起人提醒当前审批人（可重复，不产生审批记录、不改变 lastAction）。 */
+    @Transactional
+    public void remindTask(String id) {
+        User current = authService.getCurrentUser();
+        Task task = flowableTaskService.createTaskQuery().taskId(id).singleResult();
+        if (task == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "任务不存在或已办结");
+        }
+        ProcessInstance instance = loadInstanceByFlowableId(task.getProcessInstanceId());
+        if (!current.getId().equals(instance.getInitiator().getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅发起人可催办");
+        }
+        if (instance.getStatus() != ProcessInstanceStatus.RUNNING) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "仅运行中的流程可催办");
+        }
+        notificationService.remindTaskHolders(task, "催办：等待您的审批",
+                "发起人提醒您尽快处理流程【" + instance.getTitle() + "】（" + instance.getInstanceNo() + "）。",
+                task.getId());
+    }
+
     /** 转办：改派给其他用户。 */
     @Transactional
     public TaskDTO transferTask(String id, TaskTransferRequest req) {
@@ -316,6 +336,7 @@ public class TaskService {
         dto.setNodeKey(nodeKey);
         dto.setNodeName(nodeName);
         dto.setPriority(ProcessService.toUrgency(instance.getPriority()));
+        dto.setInitiatorId(instance.getInitiator().getId());
         dto.setInitiatorName(instance.getInitiator().getRealName() != null
                 ? instance.getInitiator().getRealName() : instance.getInitiator().getUsername());
     }

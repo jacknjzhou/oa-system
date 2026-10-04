@@ -189,6 +189,7 @@ export interface TaskDTO {
   createTime: string
   endTime?: string | null
   priority: number
+  initiatorId?: string | number
   initiatorName: string
   status: TaskStatus
   comment?: string | null

@@ -58,6 +58,13 @@ public class TaskController {
         return ApiResponse.success(taskService.denyTask(id, request));
     }
 
+    /** 催办：发起人提醒当前审批人（可重复，不产生审批记录）。 */
+    @PostMapping("/{id}/remind")
+    public ApiResponse<Void> remind(@PathVariable String id) {
+        taskService.remindTask(id);
+        return ApiResponse.success(null);
+    }
+
     @PostMapping("/{id}/transfer")
     public ApiResponse<TaskDTO> transfer(@PathVariable String id, @Valid @RequestBody TaskTransferRequest request) {
         return ApiResponse.success(taskService.transferTask(id, request));

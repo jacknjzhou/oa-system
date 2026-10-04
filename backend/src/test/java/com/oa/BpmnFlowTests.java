@@ -5,11 +5,13 @@ import com.oa.dto.ProcessStartRequest;
 import com.oa.dto.TaskCompleteRequest;
 import com.oa.dto.TaskRejectRequest;
 import com.oa.dto.TaskDTO;
+import com.oa.entity.ApprovalRecord;
 import com.oa.entity.ProcessInstance;
 import com.oa.entity.User;
 import com.oa.enums.NotifyType;
 import com.oa.enums.ProcessInstanceStatus;
 import com.oa.enums.RefType;
+import com.oa.repository.ApprovalRecordRepository;
 import com.oa.repository.CcRecordRepository;
 import com.oa.repository.NotificationRepository;
 import com.oa.repository.ProcessInstanceRepository;
@@ -52,6 +54,9 @@ class BpmnFlowTests {
 
     @Autowired
     private CcRecordRepository ccRecordRepository;
+
+    @Autowired
+    private ApprovalRecordRepository approvalRecordRepository;
 
     @Autowired
     private NotificationRepository notificationRepository;
@@ -438,6 +443,112 @@ class BpmnFlowTests {
         taskService.completeTask(dept.getId(), complete);
 
         assertEquals(1, ccRecordRepository.findByInstanceId(instance.getId()).size());
+    }
+
+    // ==================== 催办 / 撤回 ====================
+
+    @Test
+    void remindTask_notifiesAssigneeAndIsRepeatable() {
+        var instance = startReimbursement("催办单", 800);
+
+        loginAs("manager");
+        TaskDTO task = taskService.getMyTasks().stream()
+                .filter(t -> instance.getId().equals(t.getInstanceId()))
+                .findFirst().orElseThrow();
+
+        User manager = userRepository.findByUsername("manager").orElseThrow();
+        long before = notificationRepository
+                .findByUserIdOrderByCreatedAtDesc(manager.getId()).stream()
+                .filter(n -> n.getRefType() == RefType.TASK
+                        && task.getId().equals(n.getRefId()))
+                .count();
+
+        loginAs("employee");
+        taskService.remindTask(task.getId());
+        taskService.remindTask(task.getId()); // 重复催办不去重，可多次提醒
+
+        // 每次催办都新增一条通知（不受 (用户, 引用) 去重约束）
+        long after = notificationRepository
+                .findByUserIdOrderByCreatedAtDesc(manager.getId()).stream()
+                .filter(n -> n.getRefType() == RefType.TASK
+                        && task.getId().equals(n.getRefId()))
+                .count();
+        assertEquals(before + 2, after);
+
+        // 催办不产生审批记录，实例保持 RUNNING
+        ProcessInstance saved = instanceRepository.findById(instance.getId()).orElseThrow();
+        assertEquals(ProcessInstanceStatus.RUNNING, saved.getStatus());
+        assertEquals(1, approvalRecordRepository.findByInstanceIdOrderByCreatedAtAsc(instance.getId()).size()); // 仅 SUBMIT
+    }
+
+    @Test
+    void remindTask_notInitiator_403() {
+        var instance = startReimbursement("非发起人催办单", 800);
+
+        loginAs("manager");
+        TaskDTO task = taskService.getMyTasks().stream()
+                .filter(t -> instance.getId().equals(t.getInstanceId()))
+                .findFirst().orElseThrow();
+
+        ResponseStatusException forbidden = assertThrows(ResponseStatusException.class,
+                () -> taskService.remindTask(task.getId()));
+        assertEquals(HttpStatus.FORBIDDEN, forbidden.getStatusCode());
+    }
+
+    @Test
+    void withdrawInstance_cancelledAndTasksGone() {
+        var instance = startReimbursement("撤回单", 800);
+
+        processService.withdrawInstance(instance.getId()); // 当前登录 employee = 发起人
+
+        ProcessInstance saved = instanceRepository.findById(instance.getId()).orElseThrow();
+        assertEquals(ProcessInstanceStatus.CANCELLED, saved.getStatus());
+
+        loginAs("manager");
+        assertTrue(taskService.getMyTasks().stream()
+                .noneMatch(t -> instance.getId().equals(t.getInstanceId())));
+
+        assertTrue(approvalRecordRepository.findByInstanceIdOrderByCreatedAtAsc(instance.getId()).stream()
+                .anyMatch(r -> r.getAction() == com.oa.enums.ApprovalAction.CANCEL));
+    }
+
+    @Test
+    void withdrawInstance_notInitiator_403() {
+        var instance = startReimbursement("他人撤回单", 800);
+
+        loginAs("manager");
+        ResponseStatusException forbidden = assertThrows(ResponseStatusException.class,
+                () -> processService.withdrawInstance(instance.getId()));
+        assertEquals(HttpStatus.FORBIDDEN, forbidden.getStatusCode());
+    }
+
+    @Test
+    void withdrawRejectedInstance_allowed() {
+        // 拒绝（终止）后发起人仍可撤回：REJECTED → CANCELLED
+        var instance = startReimbursement("拒绝后撤回单", 20_000);
+
+        loginAs("manager");
+        TaskDTO task = taskService.getMyTasks().stream()
+                .filter(t -> instance.getId().equals(t.getInstanceId()))
+                .findFirst().orElseThrow();
+        TaskRejectRequest deny = new TaskRejectRequest();
+        deny.setComment("不予批准");
+        taskService.denyTask(task.getId(), deny);
+
+        loginAs("employee");
+        processService.withdrawInstance(instance.getId());
+
+        assertEquals(ProcessInstanceStatus.CANCELLED,
+                instanceRepository.findById(instance.getId()).orElseThrow().getStatus());
+    }
+
+    /** 以当前登录用户（employee）发起一笔报销。 */
+    private InstanceDTO startReimbursement(String title, int amount) {
+        ProcessStartRequest req = new ProcessStartRequest();
+        req.setDefId(templateId("reimbursement"));
+        req.setTitle(title);
+        req.setBusinessData("{\"amount\": " + amount + ", \"reason\": \"测试\"}");
+        return processService.startInstance(req);
     }
 
     /** 以指定用户身份完成该实例指定节点的当前任务。 */
