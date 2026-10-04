@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { checkApi, type CheckMonthDay, type CheckToday } from '../api/check'
 import EmptyState, { ErrorState, LoadingState } from '../components/EmptyState'
 import { useToast } from '../components/Toast'
 import { formatDateTime } from '../utils/format'
+import { downloadCsv } from '../utils/csv'
 
 function formatMinutes(min: number): string {
   if (min <= 0) return '—'
@@ -27,6 +29,7 @@ export default function Attendance() {
   const [error, setError] = useState('')
   const [clocking, setClocking] = useState<'in' | 'out' | null>(null)
   const [now, setNow] = useState(() => new Date())
+  const navigate = useNavigate()
 
   const load = useCallback(() => {
     setLoading(true)
@@ -64,6 +67,15 @@ export default function Attendance() {
   }
 
   const totalMinutes = month.reduce((sum, d) => sum + d.minutes, 0)
+
+  const exportCsv = () => {
+    const mm = monthDate.slice(0, 7)
+    downloadCsv(
+      `考勤_${mm}.csv`,
+      ['日期', '上班卡', '下班卡', '工时(分钟)', '打卡次数'],
+      month.map((d) => [d.date, formatClock(d.firstIn), formatClock(d.lastOut), d.minutes, d.count])
+    )
+  }
 
   if (loading && !today) return <LoadingState />
   if (error && !today) return <ErrorState message={error} onRetry={load} />
@@ -122,12 +134,26 @@ export default function Attendance() {
       <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-semibold">月度统计</h2>
-          <input
-            type="month"
-            value={monthDate.slice(0, 7)}
-            onChange={(e) => e.target.value && setMonthDate(`${e.target.value}-01`)}
-            className="rounded-lg border border-slate-300 bg-transparent px-3 py-1.5 text-sm dark:border-slate-600"
-          />
+          <div className="flex items-center gap-2">
+            <input
+              type="month"
+              value={monthDate.slice(0, 7)}
+              onChange={(e) => e.target.value && setMonthDate(`${e.target.value}-01`)}
+              className="rounded-lg border border-slate-300 bg-transparent px-3 py-1.5 text-sm dark:border-slate-600"
+            />
+            <button
+              onClick={exportCsv}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              导出 CSV
+            </button>
+            <button
+              onClick={() => navigate(`/print?month=${monthDate.slice(0, 7)}`)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              打印视图
+            </button>
+          </div>
         </div>
         {month.length === 0 ? (
           <div className="mt-4">

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { leaveApi, type LeaveLedgerRow, type LeaveType } from '../api/leave'
 import EmptyState, { ErrorState, LoadingState } from '../components/EmptyState'
 import { formatDateTime } from '../utils/format'
+import { downloadCsv } from '../utils/csv'
 
 const QUOTA_LABEL: Record<string, string> = {
   fixed: '定量',
@@ -88,7 +89,29 @@ export default function Leave() {
 
       {/* 流水 */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
-        <h2 className="font-semibold">假期流水</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">假期流水</h2>
+          <button
+            onClick={() =>
+              downloadCsv(
+                `假期流水_${new Date().toISOString().slice(0, 10)}.csv`,
+                ['假期类型', '变动(天)', '原因', '关联单号', '时间'],
+                Object.values(ledgers).flatMap((r) =>
+                  r.transactions.map((tx) => [
+                    r.name,
+                    tx.delta,
+                    tx.reason,
+                    tx.refInstanceNo ?? '',
+                    tx.createdAt,
+                  ])
+                )
+              )
+            }
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+          >
+            导出 CSV
+          </button>
+        </div>
         {Object.values(ledgers).every((r) => r.transactions.length === 0) ? (
           <div className="mt-4">
             <EmptyState title="暂无流水" description="请假审批通过/冲销后会在这里留痕" />

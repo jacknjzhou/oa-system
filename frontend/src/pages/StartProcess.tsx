@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import type { ApprovalType, Template, UserSummary } from '../types'
 import { getTemplates } from '../api/template'
 import { getEnabledApprovalTypes } from '../api/approvalType'
@@ -20,6 +20,7 @@ export default function StartProcess() {
   const [loadError, setLoadError] = useState('')
 
   const [category, setCategory] = useState('全部')
+  const [searchParams] = useSearchParams()
 
   // 发起抽屉状态
   const [selected, setSelected] = useState<ApprovalType | null>(null)
@@ -38,6 +39,13 @@ export default function StartProcess() {
         if (cancelled) return
         setTypes(typeData)
         setTemplates(templateData)
+        // 主页卡片带入 ?type= → 定位分组并直接打开发起抽屉
+        const code = searchParams.get('type')
+        const hit = code ? typeData.find((t) => t.code === code) : undefined
+        if (hit) {
+          if (hit.category) setCategory(hit.category)
+          setSelected(hit)
+        }
       })
       .catch((err) => {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : '审批类型加载失败')

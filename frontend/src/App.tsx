@@ -3,12 +3,14 @@ import AppShell from './components/AppShell'
 import ProtectedRoute from './components/ProtectedRoute'
 import Login from './pages/Login'
 import StartProcess from './pages/StartProcess'
+import Home from './pages/Home'
 import TaskList from './pages/TaskList'
 import ApprovalForm from './pages/ApprovalForm'
 import ProcessTracking from './pages/ProcessTracking'
 import MyInstances from './pages/MyInstances'
 import CcList from './pages/CcList'
 import Attendance from './pages/Attendance'
+import PrintAttendance from './pages/PrintAttendance'
 import Leave from './pages/Leave'
 import Users from './pages/Users'
 import PermissionGroups from './pages/PermissionGroups'
@@ -31,7 +33,7 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        <Route path="/" element={<Navigate to="/start" replace />} />
+        <Route path="/" element={<Home />} />
         <Route path="/start" element={<StartProcess />} />
         <Route path="/tasks/todo" element={<TaskList mode="todo" />} />
         <Route path="/tasks/done" element={<TaskList mode="done" />} />
@@ -40,6 +42,7 @@ export default function App() {
         <Route path="/my-instances" element={<MyInstances />} />
         <Route path="/cc" element={<CcList />} />
         <Route path="/attendance" element={<Attendance />} />
+        <Route path="/print" element={<PrintAttendance />} />
         <Route path="/leave" element={<Leave />} />
         <Route path="/users" element={<ProtectedRoute perm="hr:user"><Users /></ProtectedRoute>} />
         <Route path="/permission-groups" element={<ProtectedRoute perm="system:permission"><PermissionGroups /></ProtectedRoute>} />
@@ -52,7 +55,7 @@ export default function App() {
         <Route path="/templates/:id" element={<TemplateEditor mode="edit" />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/start" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }

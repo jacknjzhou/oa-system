@@ -13,8 +13,13 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   {
+    to: '/',
+    label: '审批主页',
+    icon: 'M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1h3a1 1 0 001-1V10',
+  },
+  {
     to: '/start',
-    label: '发起审批',
+    label: '创建申请',
     icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z',
   },
   {
@@ -100,6 +105,8 @@ function pageTitle(pathname: string): string {
   if (pathname.startsWith('/settings')) return '系统设置'
   if (pathname.startsWith('/documents/')) return '公文详情'
   if (pathname.startsWith('/documents')) return '公文'
+  if (pathname === '/') return '审批主页'
+  if (pathname.startsWith('/start')) return '创建申请'
   return '发起审批'
 }
 
@@ -140,6 +147,7 @@ export default function AppShell() {
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.to === '/'}
               className={({ isActive }) =>
                 `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                   isActive

@@ -15,7 +15,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
 
   if (getToken()) {
-    return <Navigate to="/start" replace />
+    return <Navigate to="/" replace />
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -29,7 +29,7 @@ export default function Login() {
     try {
       const result = await login(username.trim(), password)
       showToast(`欢迎回来，${result.userInfo.realName || result.userInfo.username}`, 'success')
-      navigate('/start', { replace: true })
+      navigate('/', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败，请稍后重试')
     } finally {
