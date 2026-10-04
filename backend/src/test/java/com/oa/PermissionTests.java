@@ -9,6 +9,7 @@ import com.oa.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.mock.web.MockHttpServletRequest;
 
 import java.util.List;
 import java.util.Map;
@@ -33,7 +34,9 @@ class PermissionTests {
         LoginRequest req = new LoginRequest();
         req.setUsername(username);
         req.setPassword(password);
-        ApiResponse<LoginResponse> res = authController.login(req);
+        MockHttpServletRequest http = new MockHttpServletRequest();
+        http.setRemoteAddr("127.0.0.1");
+        ApiResponse<LoginResponse> res = authController.login(req, http);
         return res.getData().getUserInfo();
     }
 

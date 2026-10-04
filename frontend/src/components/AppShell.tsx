@@ -60,6 +60,12 @@ const NAV_ITEMS: NavItem[] = [
     perm: 'system:permission',
   },
   {
+    to: '/settings',
+    label: '系统设置',
+    icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15.7 10.3l-3.99 3.99m7.03-9.94-3.99 3.99',
+    perm: ['system:settings', 'system:log', 'system:company'],
+  },
+  {
     to: '/approval-types',
     label: '审批类型',
     icon: 'M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z',
@@ -91,6 +97,7 @@ function pageTitle(pathname: string): string {
   if (pathname.startsWith('/leave')) return '我的假期'
   if (pathname.startsWith('/users')) return '员工管理'
   if (pathname.startsWith('/permission-groups')) return '权组与权限'
+  if (pathname.startsWith('/settings')) return '系统设置'
   if (pathname.startsWith('/documents/')) return '公文详情'
   if (pathname.startsWith('/documents')) return '公文'
   return '发起审批'

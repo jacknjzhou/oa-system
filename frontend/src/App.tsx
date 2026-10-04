@@ -12,6 +12,7 @@ import Attendance from './pages/Attendance'
 import Leave from './pages/Leave'
 import Users from './pages/Users'
 import PermissionGroups from './pages/PermissionGroups'
+import Settings from './pages/Settings'
 import DocumentList from './pages/DocumentList'
 import DocumentDetail from './pages/DocumentDetail'
 import TemplateList from './pages/TemplateList'
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/leave" element={<Leave />} />
         <Route path="/users" element={<ProtectedRoute perm="hr:user"><Users /></ProtectedRoute>} />
         <Route path="/permission-groups" element={<ProtectedRoute perm="system:permission"><PermissionGroups /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute perm={['system:settings', 'system:log', 'system:company']}><Settings /></ProtectedRoute>} />
         <Route path="/documents" element={<DocumentList />} />
         <Route path="/documents/:id" element={<DocumentDetail />} />
         <Route path="/approval-types" element={<ApprovalTypes />} />
