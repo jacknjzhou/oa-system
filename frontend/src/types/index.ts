@@ -16,6 +16,8 @@ export interface UserInfo {
   phone: string
   position: string
   roles: string[]
+  /** 权限码集合（权组聚合，SY-03） */
+  permissions?: string[]
 }
 
 export interface LoginResult {

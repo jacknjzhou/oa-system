@@ -34,6 +34,7 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final PasswordEncoder passwordEncoder;
+    private final PermissionService permissionService;
 
     @Transactional
     public LoginResponse login(LoginRequest request) {
@@ -126,6 +127,7 @@ public class AuthService {
         info.put("phone", user.getPhone());
         info.put("position", user.getPosition());
         info.put("roles", roleCodes);
+        info.put("permissions", permissionService.permissionCodes(user.getId()));
         response.setUserInfo(info);
         return response;
     }

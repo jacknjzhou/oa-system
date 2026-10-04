@@ -7,6 +7,8 @@ interface NavItem {
   to: string
   label: string
   icon: string
+  /** 需要的权限码（任一匹配即可）；ADMIN 直通 */
+  perm?: string | string[]
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -49,6 +51,13 @@ const NAV_ITEMS: NavItem[] = [
     to: '/users',
     label: '员工管理',
     icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z',
+    perm: 'hr:user',
+  },
+  {
+    to: '/permission-groups',
+    label: '权组权限',
+    icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.062-.152-2.11-.44-3.102z',
+    perm: 'system:permission',
   },
   {
     to: '/approval-types',
@@ -81,6 +90,7 @@ function pageTitle(pathname: string): string {
   if (pathname.startsWith('/attendance')) return '考勤打卡'
   if (pathname.startsWith('/leave')) return '我的假期'
   if (pathname.startsWith('/users')) return '员工管理'
+  if (pathname.startsWith('/permission-groups')) return '权组与权限'
   if (pathname.startsWith('/documents/')) return '公文详情'
   if (pathname.startsWith('/documents')) return '公文'
   return '发起审批'
@@ -92,6 +102,12 @@ export default function AppShell() {
   const location = useLocation()
   const user = getStoredUser()
   const title = pageTitle(location.pathname)
+  const hasPerm = (perm?: string | string[]) => {
+    if (!perm) return true
+    if ((user?.roles ?? []).includes('ADMIN')) return true
+    const codes = user?.permissions ?? []
+    return (Array.isArray(perm) ? perm : [perm]).some((c) => codes.includes(c))
+  }
 
   const handleLogout = async () => {
     await logout()
@@ -113,7 +129,7 @@ export default function AppShell() {
         </div>
 
         <nav className="mt-4 flex-1 space-y-1 overflow-y-auto px-3">
-          {NAV_ITEMS.map((item) => (
+          {NAV_ITEMS.filter((item) => hasPerm(item.perm)).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
