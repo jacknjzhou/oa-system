@@ -108,6 +108,10 @@ const ACTION_MAP: Record<ApprovalAction, BadgeStyle> = {
     label: '取消',
     cls: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
   },
+  DENY: {
+    label: '拒绝',
+    cls: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400',
+  },
 }
 
 export function ActionBadge({ action }: { action: ApprovalAction }) {

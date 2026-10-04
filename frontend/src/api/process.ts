@@ -24,3 +24,9 @@ export async function cancelInstance(id: string): Promise<InstanceDTO> {
   const response = await apiClient.post<InstanceDTO>(`/process-instances/${id}/cancel`)
   return response.data
 }
+
+/** 提交草稿（DRAFT → RUNNING），仅发起人 */
+export async function submitInstance(id: string): Promise<InstanceDTO> {
+  const response = await apiClient.post<InstanceDTO>(`/process-instances/${id}/submit`)
+  return response.data
+}

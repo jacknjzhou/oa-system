@@ -10,6 +10,8 @@ import com.oa.repository.ProcessInstanceRepository;
 import com.oa.service.ProcessService;
 import com.oa.service.TaskService;
 import org.junit.jupiter.api.AfterEach;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +24,8 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -215,6 +219,139 @@ class BpmnFlowTests {
                 && "COMPLETED".equals(x.get("status"))));
         assertTrue(elements.stream().anyMatch(x -> "MANAGER".equals(x.get("groupCode"))
                 && "PENDING".equals(x.get("status"))));
+    }
+
+    @Test
+    void draftInstance_createdWithoutEngine_andSubmittableOnlyByInitiator() {
+        ProcessStartRequest req = new ProcessStartRequest();
+        req.setDefId(templateId("reimbursement"));
+        req.setTitle("草稿测试");
+        req.setBusinessData("{\"amount\": 800, \"reason\": \"测试\"}");
+        req.setDraft(true);
+
+        var instance = processService.startInstance(req);
+        assertEquals("DRAFT", instance.getStatus());
+        ProcessInstance saved = instanceRepository.findById(instance.getId()).orElseThrow();
+        assertEquals(ProcessInstanceStatus.DRAFT, saved.getStatus());
+        assertNull(saved.getFlowableInstanceId());
+
+        // 草稿不产生待办
+        loginAs("manager");
+        assertTrue(taskService.getMyTasks().stream()
+                .noneMatch(t -> instance.getId().equals(t.getInstanceId())));
+
+        // 非发起人不能提交
+        ResponseStatusException forbidden = assertThrows(ResponseStatusException.class,
+                () -> processService.submitInstance(instance.getId()));
+        assertEquals(HttpStatus.FORBIDDEN, forbidden.getStatusCode());
+
+        // 发起人提交 → RUNNING 且产生首个任务
+        loginAs("employee");
+        var submitted = processService.submitInstance(instance.getId());
+        assertEquals("RUNNING", submitted.getStatus());
+        assertNotNull(instanceRepository.findById(instance.getId()).orElseThrow().getFlowableInstanceId());
+        loginAs("manager");
+        assertTrue(taskService.getMyTasks().stream()
+                .anyMatch(t -> instance.getId().equals(t.getInstanceId())
+                        && "dept_manager".equals(t.getNodeKey())));
+    }
+
+    @Test
+    void submitInstance_rejectsNonDraft() {
+        ProcessStartRequest req = new ProcessStartRequest();
+        req.setDefId(templateId("reimbursement"));
+        req.setTitle("重复提交测试");
+        req.setBusinessData("{\"amount\": 800, \"reason\": \"测试\"}");
+        var instance = processService.startInstance(req);
+        ResponseStatusException badRequest = assertThrows(ResponseStatusException.class,
+                () -> processService.submitInstance(instance.getId()));
+        assertEquals(HttpStatus.BAD_REQUEST, badRequest.getStatusCode());
+    }
+
+    @Test
+    void denyTask_terminatesInstanceWithDenyAction() {
+        ProcessStartRequest req = new ProcessStartRequest();
+        req.setDefId(templateId("reimbursement"));
+        req.setTitle("拒绝测试");
+        req.setBusinessData("{\"amount\": 500, \"reason\": \"测试\"}");
+        var instance = processService.startInstance(req);
+
+        loginAs("manager");
+        TaskDTO task = taskService.getMyTasks().stream()
+                .filter(t -> instance.getId().equals(t.getInstanceId()))
+                .findFirst().orElseThrow();
+        TaskRejectRequest deny = new TaskRejectRequest();
+        deny.setComment("不符合报销规定");
+        taskService.denyTask(task.getId(), deny);
+
+        ProcessInstance saved = instanceRepository.findById(instance.getId()).orElseThrow();
+        assertEquals(ProcessInstanceStatus.REJECTED, saved.getStatus());
+        assertTrue(taskService.getMyTasks().stream()
+                .noneMatch(t -> instance.getId().equals(t.getInstanceId())));
+
+        // DTO 暴露最近审批动作
+        assertEquals("DENY", processService.toInstanceDto(saved).getLastAction());
+    }
+
+    @Test
+    void rejectToNode_keepsRunningWithLastActionReject() {
+        // 高额报销：经理通过 → 会签中财务驳回到部门经理 → 实例仍 RUNNING，打回部门经理重审
+        ProcessStartRequest req = new ProcessStartRequest();
+        req.setDefId(templateId("reimbursement"));
+        req.setTitle("节点驳回测试");
+        req.setBusinessData("{\"amount\": 20000, \"reason\": \"测试\"}");
+        var instance = processService.startInstance(req);
+
+        TaskCompleteRequest complete = new TaskCompleteRequest();
+        complete.setComment("同意");
+        loginAs("manager");
+        TaskDTO dept = taskService.getMyTasks().stream()
+                .filter(t -> instance.getId().equals(t.getInstanceId()))
+                .findFirst().orElseThrow();
+        taskService.completeTask(dept.getId(), complete);
+
+        loginAs("finance");
+        TaskDTO myEl = taskService.getMyTasks().stream()
+                .filter(t -> instance.getId().equals(t.getInstanceId()))
+                .findFirst().orElseThrow();
+        TaskRejectRequest reject = new TaskRejectRequest();
+        reject.setComment("金额需复核");
+        reject.setToNodeKey("dept_manager");
+        taskService.rejectTask(myEl.getId(), reject);
+
+        ProcessInstance saved = instanceRepository.findById(instance.getId()).orElseThrow();
+        assertEquals(ProcessInstanceStatus.RUNNING, saved.getStatus());
+        assertEquals("dept_manager", saved.getCurrentNode());
+        assertEquals("REJECT", processService.toInstanceDto(saved).getLastAction());
+
+        loginAs("manager");
+        assertTrue(taskService.getMyTasks().stream()
+                .anyMatch(t -> instance.getId().equals(t.getInstanceId())
+                        && "dept_manager".equals(t.getNodeKey())));
+    }
+
+    @Test
+    void instanceDto_exposesLastAction_inListAndDetail() {
+        ProcessStartRequest req = new ProcessStartRequest();
+        req.setDefId(templateId("reimbursement"));
+        req.setTitle("动作轨迹测试");
+        req.setBusinessData("{\"amount\": 500, \"reason\": \"测试\"}");
+        var instance = processService.startInstance(req);
+
+        loginAs("manager");
+        TaskDTO task = taskService.getMyTasks().stream()
+                .filter(t -> instance.getId().equals(t.getInstanceId()))
+                .findFirst().orElseThrow();
+        TaskCompleteRequest complete = new TaskCompleteRequest();
+        complete.setComment("同意");
+        taskService.completeTask(task.getId(), complete);
+
+        loginAs("employee");
+        var listed = processService.listMyInstances().stream()
+                .filter(i -> instance.getId().equals(i.getId()))
+                .findFirst().orElseThrow();
+        assertEquals("APPROVE", listed.getLastAction());
+        assertEquals("COMPLETED", listed.getStatus());
     }
 
     /** 以指定用户身份完成该实例指定节点的当前任务。 */

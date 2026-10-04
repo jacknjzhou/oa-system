@@ -32,6 +32,14 @@ export async function rejectTask(
   await apiClient.post(`/tasks/${id}/reject`, payload)
 }
 
+/** 拒绝：终止整个流程（区别于驳回到节点） */
+export async function denyTask(
+  id: string,
+  payload: { comment: string }
+): Promise<void> {
+  await apiClient.post(`/tasks/${id}/deny`, payload)
+}
+
 /** 转办 */
 export async function transferTask(
   id: string,

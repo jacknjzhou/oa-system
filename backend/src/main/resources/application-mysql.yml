@@ -24,6 +24,7 @@ spring:
       mode: never
   flyway:
     enabled: true
+    locations: classpath:db/migration/common,classpath:db/migration/mysql
     # 已有库（无 flyway_schema_history）以基线方式接管，不重放 V1
     baseline-on-missing-version: true
 

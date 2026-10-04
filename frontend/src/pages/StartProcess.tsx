@@ -21,6 +21,7 @@ export default function StartProcess() {
   const [selected, setSelected] = useState<Template | null>(null)
   const [title, setTitle] = useState('')
   const [values, setValues] = useState<Record<string, string>>({})
+  const [asDraft, setAsDraft] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -55,6 +56,7 @@ export default function StartProcess() {
     setSelected(template)
     setTitle('')
     setValues({})
+    setAsDraft(false)
   }
 
   const closeDrawer = () => {
@@ -84,8 +86,9 @@ export default function StartProcess() {
         defId: selected.id,
         title: title.trim(),
         businessData: JSON.stringify(values),
+        draft: asDraft || undefined,
       })
-      showToast('流程发起成功', 'success')
+      showToast(asDraft ? '已存为草稿，可在「我的申请」提交' : '流程发起成功', 'success')
       setSelected(null)
       navigate('/my-instances')
     } catch (err) {
@@ -244,6 +247,21 @@ export default function StartProcess() {
                 onChange={handleValueChange}
                 disabled={submitting}
               />
+              <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 accent-primary-600"
+                  checked={asDraft}
+                  onChange={(e) => setAsDraft(e.target.checked)}
+                  disabled={submitting}
+                />
+                <span>
+                  先存草稿
+                  <span className="block text-xs text-slate-400 dark:text-slate-500">
+                    不立即进入审批流程，稍后在「我的申请」中提交
+                  </span>
+                </span>
+              </label>
             </div>
 
             {/* 抽屉底部 */}
@@ -252,7 +270,7 @@ export default function StartProcess() {
                 取消
               </button>
               <button type="button" className="btn btn-primary" onClick={handleSubmit} disabled={submitting}>
-                {submitting ? '提交中…' : '提交申请'}
+                {submitting ? '提交中…' : asDraft ? '存为草稿' : '提交申请'}
               </button>
             </div>
           </div>

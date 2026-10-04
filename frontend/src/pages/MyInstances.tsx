@@ -1,18 +1,24 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { InstanceDTO, InstanceStatus } from '../types'
-import { getMyInstances } from '../api/process'
+import type { InstanceDTO } from '../types'
+import { getMyInstances, submitInstance } from '../api/process'
 import StatusBadge, { PriorityBadge } from '../components/Badge'
 import EmptyState, { ErrorState, LoadingState } from '../components/EmptyState'
 import { useToast } from '../components/Toast'
 import { formatDateTime } from '../utils/format'
 
-const STATUS_FILTERS: { value: InstanceStatus | 'ALL'; label: string }[] = [
-  { value: 'ALL', label: '全部' },
-  { value: 'RUNNING', label: '进行中' },
-  { value: 'COMPLETED', label: '已完成' },
-  { value: 'REJECTED', label: '已驳回' },
-  { value: 'CANCELLED', label: '已取消' },
+/**
+ * 结果视图 Tab（对照致碟云“审批中心”）：
+ * 审批中 / 已同意 / 已拒绝（整单终止）/ 已驳回（打回节点等待中）/ 已撤回 / 草稿。
+ */
+const STATUS_FILTERS: { value: string; label: string; match: (i: InstanceDTO) => boolean }[] = [
+  { value: 'ALL', label: '全部', match: () => true },
+  { value: 'RUNNING', label: '审批中', match: (i) => i.status === 'RUNNING' },
+  { value: 'APPROVED', label: '已同意', match: (i) => i.status === 'COMPLETED' },
+  { value: 'DENIED', label: '已拒绝', match: (i) => i.status === 'REJECTED' },
+  { value: 'SENT_BACK', label: '已驳回', match: (i) => i.status === 'RUNNING' && i.lastAction === 'REJECT' },
+  { value: 'WITHDRAWN', label: '已撤回', match: (i) => i.status === 'CANCELLED' },
+  { value: 'DRAFT', label: '草稿', match: (i) => i.status === 'DRAFT' },
 ]
 
 export default function MyInstances() {
@@ -21,35 +27,43 @@ export default function MyInstances() {
   const [instances, setInstances] = useState<InstanceDTO[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
-  const [statusFilter, setStatusFilter] = useState<InstanceStatus | 'ALL'>('ALL')
+  const [statusFilter, setStatusFilter] = useState<string>('ALL')
+  const [submittingId, setSubmittingId] = useState<string | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
+  const loadInstances = useCallback(() => {
     setLoading(true)
     setLoadError('')
     getMyInstances()
-      .then((data) => {
-        if (!cancelled) setInstances(data)
-      })
+      .then(setInstances)
       .catch((err) => {
-        if (!cancelled) {
-          const message = err instanceof Error ? err.message : '申请列表加载失败'
-          setLoadError(message)
-          showToast(message, 'error')
-        }
+        const message = err instanceof Error ? err.message : '申请列表加载失败'
+        setLoadError(message)
+        showToast(message, 'error')
       })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
+      .finally(() => setLoading(false))
   }, [showToast])
 
-  const visibleInstances = useMemo(
-    () => (statusFilter === 'ALL' ? instances : instances.filter((i) => i.status === statusFilter)),
-    [instances, statusFilter]
-  )
+  useEffect(() => {
+    loadInstances()
+  }, [loadInstances])
+
+  const handleSubmitDraft = async (id: string) => {
+    setSubmittingId(id)
+    try {
+      await submitInstance(id)
+      showToast('草稿已提交，流程开始审批', 'success')
+      loadInstances()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '提交失败', 'error')
+    } finally {
+      setSubmittingId(null)
+    }
+  }
+
+  const visibleInstances = useMemo(() => {
+    const filter = STATUS_FILTERS.find((f) => f.value === statusFilter) ?? STATUS_FILTERS[0]
+    return instances.filter(filter.match)
+  }, [instances, statusFilter])
 
   return (
     <div className="mx-auto max-w-5xl p-6">
@@ -116,20 +130,42 @@ export default function MyInstances() {
                       ? instance.currentNodeName || instance.currentNode || '-'
                       : instance.status === 'COMPLETED'
                         ? '已结束'
-                        : '-'}
+                        : instance.status === 'DRAFT'
+                          ? '未提交'
+                          : '-'}
                   </span>
                 </p>
               </div>
               <div className="shrink-0 text-right">
                 <p className="text-xs text-slate-400 dark:text-slate-500">
-                  提交于 {formatDateTime(instance.submittedAt)}
+                  {instance.status === 'DRAFT' ? '草稿' : `提交于 ${formatDateTime(instance.submittedAt)}`}
                 </p>
-                <span className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-primary-600 dark:text-primary-400">
-                  跟踪详情
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </span>
+                {instance.status === 'DRAFT' ? (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="mt-1 inline-flex cursor-pointer items-center gap-1 text-sm font-medium text-amber-600 hover:underline dark:text-amber-400"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleSubmitDraft(instance.id)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.stopPropagation()
+                        handleSubmitDraft(instance.id)
+                      }
+                    }}
+                  >
+                    {submittingId === instance.id ? '提交中…' : '提交草稿'}
+                  </span>
+                ) : (
+                  <span className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-primary-600 dark:text-primary-400">
+                    跟踪详情
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </span>
+                )}
               </div>
             </button>
           ))}

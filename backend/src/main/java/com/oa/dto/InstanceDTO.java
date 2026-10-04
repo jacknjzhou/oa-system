@@ -40,8 +40,13 @@ public class InstanceDTO {
 
     private String currentNodeName;
 
-    /** RUNNING / COMPLETED / CANCELLED / REJECTED */
+    /** RUNNING / COMPLETED / CANCELLED / REJECTED / DRAFT */
     private String status;
+
+    /** 最近一次非发起审批动作（APPROVE/REJECT/DENY/TRANSFER/CANCEL），用于“驳回中/已拒绝”等结果视图 */
+    private String lastAction;
+
+    private String lastActionAt;
 
     /** 紧急度：0=普通，1=重要，2=紧急 */
     private Integer priority;

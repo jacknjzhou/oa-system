@@ -83,4 +83,10 @@ public class ProcessController {
     public ApiResponse<InstanceDTO> cancelInstance(@PathVariable Long id) {
         return ApiResponse.success(processService.cancelInstance(id));
     }
+
+    /** 提交草稿（DRAFT → 启动 Flowable → RUNNING），仅发起人。 */
+    @PostMapping("/process-instances/{id}/submit")
+    public ApiResponse<InstanceDTO> submitInstance(@PathVariable Long id) {
+        return ApiResponse.success(processService.submitInstance(id));
+    }
 }

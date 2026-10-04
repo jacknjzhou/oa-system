@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { FormField, TaskDetail, UserSummary } from '../types'
-import { getTask, completeTask, rejectTask, transferTask } from '../api/task'
+import { getTask, completeTask, rejectTask, denyTask, transferTask } from '../api/task'
 import { getTemplate } from '../api/template'
 import { getUsers } from '../api/user'
 import { getStoredUser } from '../api/auth'
@@ -14,7 +14,7 @@ import EmptyState, { ErrorState, LoadingState } from '../components/EmptyState'
 import { formatDateTime, parseFormConfig } from '../utils/format'
 import { parseUserTasks } from '../utils/bpmn'
 
-type ActionModal = 'approve' | 'reject' | 'transfer' | null
+type ActionModal = 'approve' | 'reject' | 'deny' | 'transfer' | null
 
 export default function ApprovalForm() {
   const { id } = useParams<{ id: string }>()
@@ -106,6 +106,24 @@ export default function ApprovalForm() {
         toNodeKey: toNodeKey || undefined,
       })
       showToast(toNodeKey ? '已驳回到指定节点' : '已驳回', 'success')
+      navigate('/tasks/todo')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '操作失败', 'error')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleSubmitDeny = async () => {
+    if (!detail) return
+    if (!comment.trim()) {
+      showToast('请填写拒绝意见', 'error')
+      return
+    }
+    setSubmitting(true)
+    try {
+      await denyTask(detail.task.id, { comment: comment.trim() })
+      showToast('已拒绝，流程终止', 'success')
       navigate('/tasks/todo')
     } catch (err) {
       showToast(err instanceof Error ? err.message : '操作失败', 'error')
@@ -239,7 +257,13 @@ export default function ApprovalForm() {
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
-              驳回
+              驳回（回节点）
+            </button>
+            <button type="button" className="btn btn-danger" onClick={() => openModal('deny')}>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 105.636 5.636M12 3v9l.01 6M9.9 15h4.2" />
+              </svg>
+              拒绝（终止）
             </button>
             <button type="button" className="btn btn-violet" onClick={() => openModal('transfer')}>
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -345,6 +369,38 @@ export default function ApprovalForm() {
               disabled={submitting}
             />
           </div>
+        </div>
+      </Modal>
+
+      {/* 拒绝弹窗（终止流程） */}
+      <Modal
+        open={modal === 'deny'}
+        title="拒绝审批"
+        onClose={closeModal}
+        footer={
+          <>
+            <button type="button" className="btn btn-secondary" onClick={closeModal} disabled={submitting}>
+              取消
+            </button>
+            <button type="button" className="btn btn-danger" onClick={handleSubmitDeny} disabled={submitting}>
+              {submitting ? '提交中…' : '确认拒绝'}
+            </button>
+          </>
+        }
+      >
+        <div>
+          <label className="form-label" htmlFor="deny-comment">
+            拒绝意见 <span className="text-red-500">*</span>
+          </label>
+          <textarea
+            id="deny-comment"
+            className="input min-h-[80px] resize-y"
+            placeholder="请输入拒绝原因（流程将终止）"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            disabled={submitting}
+          />
+          <p className="mt-1 text-xs text-red-400">拒绝后流程立即结束，发起人可修改后重新发起</p>
         </div>
       </Modal>
 

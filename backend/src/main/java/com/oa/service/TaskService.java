@@ -193,6 +193,29 @@ public class TaskService {
         return toDtoFromHistory(id);
     }
 
+    /** 拒绝：终止整个流程实例（区别于“驳回到节点”）。
+     *  语义与无目标的 rejectTask 分支一致，但审批动作记为 DENY，
+     *  便于“已拒绝”结果视图与“驳回中（打回节点）”区分。 */
+    @Transactional
+    public TaskDTO denyTask(String id, TaskRejectRequest req) {
+        Task task = loadOperableTask(id);
+        User operator = authService.getCurrentUser();
+        ProcessInstance instance = loadInstanceByFlowableId(task.getProcessInstanceId());
+
+        processService.recordApproval(instance, task.getId(), task.getTaskDefinitionKey(), task.getName(),
+                ApprovalAction.DENY, operator, req.getComment(), task.getTaskDefinitionKey(), null);
+
+        runtimeService.deleteProcessInstance(task.getProcessInstanceId(),
+                "拒绝: " + (req.getComment() != null ? req.getComment() : ""));
+        instance.setStatus(ProcessInstanceStatus.REJECTED);
+        instance.setCompletedAt(LocalDateTime.now());
+        instanceRepository.save(instance);
+        notificationService.notify(instance.getInitiator(), "流程被拒绝",
+                "流程【" + instance.getTitle() + "】已被拒绝。",
+                NotifyType.PROCESS, RefType.PROCESS_INSTANCE, String.valueOf(instance.getId()));
+        return toDtoFromHistory(id);
+    }
+
     /** 转办：改派给其他用户。 */
     @Transactional
     public TaskDTO transferTask(String id, TaskTransferRequest req) {

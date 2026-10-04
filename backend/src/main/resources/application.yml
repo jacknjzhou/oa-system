@@ -30,8 +30,9 @@ spring:
       # 顺序由 Flyway 保证（V1 建表 → V2 表 → V3 种子），两档 profile 行为一致。
       mode: never
   flyway:
-    # 统一启用：H2 开发/测试与 MySQL 生产走同一套迁移（V1 业务表 / V2 refresh_token / V3 种子）
+    # 统一启用：H2 开发/测试与 MySQL 生产走同一套迁移（common 双库通用 + h2 方言专属）
     enabled: ${FLYWAY_ENABLED:true}
+    locations: classpath:db/migration/common,classpath:db/migration/h2
 
 flowable:
   # 启动时自动创建/更新引擎表结构（Flowable 自管 ACT_*/FLW_* 表）

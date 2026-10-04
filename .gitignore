@@ -6,7 +6,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.iml
-
+.workbuddy/
 # Java / Maven
 target/
 build/
@@ -38,3 +38,4 @@ docker/data/
 
 # data.sql 已版本化为 Flyway V3__seed.sql；忽略防止网盘同步客户端复活该文件
 backend/src/main/resources/data.sql
+.superpowers/

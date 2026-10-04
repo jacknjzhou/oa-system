@@ -21,4 +21,7 @@ public class ProcessStartRequest {
     private BusinessType businessType;
 
     private String businessData;
+
+    /** true = 只存草稿（不落 Flowable），稍后通过 POST /process-instances/{id}/submit 启动 */
+    private Boolean draft;
 }

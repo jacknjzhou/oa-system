@@ -52,8 +52,15 @@ public class TaskController {
         return ApiResponse.success(taskService.rejectTask(id, request));
     }
 
+    /** 拒绝：终止整个流程（区别于驳回到节点）。 */
+    @PostMapping("/{id}/deny")
+    public ApiResponse<TaskDTO> deny(@PathVariable String id, @Valid @RequestBody TaskRejectRequest request) {
+        return ApiResponse.success(taskService.denyTask(id, request));
+    }
+
     @PostMapping("/{id}/transfer")
     public ApiResponse<TaskDTO> transfer(@PathVariable String id, @Valid @RequestBody TaskTransferRequest request) {
         return ApiResponse.success(taskService.transferTask(id, request));
     }
+
 }

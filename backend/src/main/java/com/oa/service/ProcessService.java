@@ -190,22 +190,55 @@ public class ProcessService {
         instance.setBusinessType(req.getBusinessType() != null ? req.getBusinessType() : BusinessType.REIMBURSEMENT);
         instance.setBusinessData(req.getBusinessData());
         instance.setPriority(Priority.NORMAL);
+
+        if (Boolean.TRUE.equals(req.getDraft())) {
+            // 草稿：只落自有表（status=DRAFT，无 Flowable 实例），不部署不启动引擎
+            instance.setSubmittedAt(null);
+            instance.setStatus(ProcessInstanceStatus.DRAFT);
+            instance = instanceRepository.save(instance);
+            return toInstanceDto(instance);
+        }
+
         instance.setSubmittedAt(LocalDateTime.now());
         instance.setStatus(ProcessInstanceStatus.RUNNING);
         instance = instanceRepository.save(instance);
 
-        Map<String, Object> variables = parseVariables(req.getBusinessData());
+        launchEngine(instance);
+        return toInstanceDto(instance);
+    }
+
+    /** 提交草稿：发起人把 DRAFT 实例启动为 RUNNING 流程。 */
+    @Transactional
+    public InstanceDTO submitInstance(Long id) {
+        ProcessInstance instance = loadInstance(id);
+        if (instance.getStatus() != ProcessInstanceStatus.DRAFT) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "仅草稿状态可提交");
+        }
+        User operator = authService.getCurrentUser();
+        if (!instance.getInitiator().getId().equals(operator.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅发起人可提交该草稿");
+        }
+        instance.setStatus(ProcessInstanceStatus.RUNNING);
+        instance.setSubmittedAt(LocalDateTime.now());
+        instance = instanceRepository.save(instance);
+
+        launchEngine(instance);
+        return toInstanceDto(instance);
+    }
+
+    /** 启动 Flowable 引擎实例、记录发起审批、同步当前节点与待办通知。 */
+    private void launchEngine(ProcessInstance instance) {
+        Map<String, Object> variables = parseVariables(instance.getBusinessData());
         org.flowable.engine.runtime.ProcessInstance flowableInstance = runtimeService
-                .startProcessInstanceByKey(def.getDefKey(), instance.getInstanceNo(), variables);
+                .startProcessInstanceByKey(instance.getDef().getDefKey(), instance.getInstanceNo(), variables);
         instance.setFlowableInstanceId(flowableInstance.getId());
         instance = instanceRepository.save(instance);
 
+        User initiator = instance.getInitiator();
         recordApproval(instance, null, "start", "发起",
                 ApprovalAction.SUBMIT, initiator, "发起流程", "start", null);
 
         syncInstanceAfterAction(instance);
-
-        return toInstanceDto(instance);
     }
 
     @Transactional(readOnly = true)
@@ -432,7 +465,21 @@ public class ProcessService {
         dto.setPriority(toUrgency(instance.getPriority()));
         dto.setSubmittedAt(instance.getSubmittedAt() != null ? instance.getSubmittedAt().format(TS) : null);
         dto.setCompletedAt(instance.getCompletedAt() != null ? instance.getCompletedAt().format(TS) : null);
+        fillLastAction(dto, instance);
         return dto;
+    }
+
+    /** 最近一次非 SUBMIT 审批动作（拒绝/驳回/转办/取消）及其时间，用于结果视图与“驳回中”筛选。 */
+    private void fillLastAction(InstanceDTO dto, ProcessInstance instance) {
+        List<ApprovalRecord> records = approvalRecordRepository.findByInstanceIdOrderByCreatedAtAsc(instance.getId());
+        for (int i = records.size() - 1; i >= 0; i--) {
+            ApprovalRecord r = records.get(i);
+            if (r.getAction() != null && r.getAction() != ApprovalAction.SUBMIT) {
+                dto.setLastAction(r.getAction().name());
+                dto.setLastActionAt(r.getCreatedAt() != null ? r.getCreatedAt().format(TS) : null);
+                return;
+            }
+        }
     }
 
     /** 紧急度映射：LOW/NORMAL=0，HIGH=1，URGENT=2。 */

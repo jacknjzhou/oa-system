@@ -90,7 +90,7 @@ export interface FormConfig {
 
 // ========== 流程实例 ==========
 
-export type InstanceStatus = 'RUNNING' | 'COMPLETED' | 'CANCELLED' | 'REJECTED'
+export type InstanceStatus = 'RUNNING' | 'COMPLETED' | 'CANCELLED' | 'REJECTED' | 'DRAFT'
 
 export interface InstanceDTO {
   id: string
@@ -107,6 +107,9 @@ export interface InstanceDTO {
   currentNode: string
   currentNodeName: string
   status: InstanceStatus
+  /** 最近一次非发起审批动作（APPROVE/REJECT/DENY/TRANSFER/CANCEL），用于结果视图 */
+  lastAction?: ApprovalAction | null
+  lastActionAt?: string | null
   priority: number
   submittedAt: string
   completedAt?: string | null
@@ -116,9 +119,11 @@ export interface StartInstancePayload {
   defId: string
   title: string
   businessData: string
+  /** true = 只存草稿，稍后从“我的申请”提交 */
+  draft?: boolean
 }
 
-export type ApprovalAction = 'SUBMIT' | 'APPROVE' | 'REJECT' | 'TRANSFER' | 'CANCEL'
+export type ApprovalAction = 'SUBMIT' | 'APPROVE' | 'REJECT' | 'TRANSFER' | 'CANCEL' | 'DENY'
 
 export interface ApprovalRecordDTO {
   id: string
