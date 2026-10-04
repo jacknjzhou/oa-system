@@ -30,7 +30,7 @@ class FlywayBootstrapTest {
     @Test
     void contextBootsAndMigrationsApplied() {
         // 当前迁移版本应为 V10（… / V9 审批类型 / V10 business_type 字符串化）
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("14");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("15");
     }
 
     @Test

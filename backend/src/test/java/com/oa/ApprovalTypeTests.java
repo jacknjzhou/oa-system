@@ -6,6 +6,7 @@ import com.oa.dto.InstanceDTO;
 import com.oa.dto.ProcessStartRequest;
 import com.oa.repository.ApprovalTypeRepository;
 import com.oa.service.ApprovalTypeService;
+import com.oa.service.ProcessService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,6 +65,32 @@ class ApprovalTypeTests {
     }
 
     @Test
+    void seeded_15_system_presets_and_two_templates() {
+        List<ApprovalTypeDTO> all = approvalTypeService.listAll();
+        var codes = all.stream().map(ApprovalTypeDTO::getCode).toList();
+        assertThat(codes).contains("LEAVE", "PROCUREMENT", "TRAVEL", "OVERTIME", "OUTSIDE",
+                "PUNCH_FIX", "SEAL_USE", "CAR_USE", "CONTRACT", "PAYMENT", "ADVANCE",
+                "REGULARIZATION", "RECRUITMENT", "RESIGNATION", "DOCUMENT", "REIMBURSEMENT");
+
+        // 请假/采购模板已内置并发布（含表单 + 流程）
+        var defs = processService.listDefinitions(true);
+        var leave = defs.stream().filter(d -> "leave".equals(d.getDefKey())).findFirst().orElseThrow();
+        assertThat(leave.getStatus()).isEqualTo("PUBLISHED");
+        assertThat(leave.getFormConfig()).contains("leaveType");
+        assertThat(leave.getFlowSpec()).contains("managerApprove");
+        assertThat(leave.isFlowReady()).isTrue();
+
+        var procurement = defs.stream().filter(d -> "procurement".equals(d.getDefKey()))
+                .findFirst().orElseThrow();
+        assertThat(procurement.isFlowReady()).isTrue();
+
+        // 请假类型关联请假模板
+        ApprovalTypeDTO leaveType = all.stream()
+                .filter(t -> "LEAVE".equals(t.getCode())).findFirst().orElseThrow();
+        assertThat(leaveType.getDefName()).isEqualTo("请假审批");
+    }
+
+    @Test
     void seeded_reimbursement_type_points_to_reimbursement_def() {
         List<ApprovalTypeDTO> all = approvalTypeService.listAll();
         assertThat(all.stream().map(ApprovalTypeDTO::getCode)).contains("REIMBURSEMENT");
@@ -76,24 +103,25 @@ class ApprovalTypeTests {
     @Test
     void create_and_list_includes_defName_and_enabledFilter() {
         Long defId = reimbursementDefId();
-        approvalTypeService.create(req("TRAVEL", "差旅", defId));
-        approvalTypeService.create(req("CONTRACT", "合同", defId));
+        // 用 _TEST 后缀避开 15 个系统预设的 code（TRAVEL/CONTRACT 已预置）
+        approvalTypeService.create(req("TRAVEL_TEST", "差旅", defId));
+        approvalTypeService.create(req("CONTRACT_TEST", "合同", defId));
 
         ApprovalTypeDTO contract = approvalTypeService.listAll().stream()
-                .filter(t -> "CONTRACT".equals(t.getCode())).findFirst().orElseThrow();
-        ApprovalTypeRequest off = req("CONTRACT", "合同", contract.getDefId());
+                .filter(t -> "CONTRACT_TEST".equals(t.getCode())).findFirst().orElseThrow();
+        ApprovalTypeRequest off = req("CONTRACT_TEST", "合同", contract.getDefId());
         off.setEnabled(false);
         approvalTypeService.update(contract.getId(), off);
 
         ApprovalTypeDTO travel = approvalTypeService.listAll().stream()
-                .filter(t -> "TRAVEL".equals(t.getCode())).findFirst().orElseThrow();
+                .filter(t -> "TRAVEL_TEST".equals(t.getCode())).findFirst().orElseThrow();
         assertThat(travel.getDefName()).isNotBlank();
         assertThat(travel.getEnabled()).isTrue();
 
         List<ApprovalTypeDTO> enabled = approvalTypeService.listEnabled();
         assertThat(enabled.stream().map(ApprovalTypeDTO::getCode))
-                .contains("REIMBURSEMENT", "TRAVEL")
-                .doesNotContain("CONTRACT");
+                .contains("REIMBURSEMENT", "TRAVEL_TEST")
+                .doesNotContain("CONTRACT_TEST");
     }
 
     @Test
