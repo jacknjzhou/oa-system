@@ -40,6 +40,10 @@
 - **角色即候选组**：BPMN `candidateGroups` 写角色 code，待办 = 指派人 ∪ 所属角色候选
 - **会签（多实例并行）**：报销流程金额 > 10000 时进入会签节点（`FINANCE`+`MANAGER` 并行，`completionCondition` 要求全部完成，任一拒绝即驳回流程）；`≤ 10000` 直走部门经理→完成，不受影响
 - **会签进度**：流程详情接口返回 `countersigns[]`（节点级 `total/completed/rejected/pending` + 每元素 `groupCode/status/assignee`）；元素变量存于多实例循环 execution 作用域，由服务层 join Flowable 引擎表（`ACT_RU_*`/`ACT_HI_*`，注意 MySQL 表名大小写敏感）取回
+- **审批四态**：通过（同意）/ 驳回（可指回目标节点，不指则整单驳回结束）/ 拒绝（终止流程，发起人可重新发起）/ 转办（转给他人代办，留痕）。实例增加 `DRAFT` 草稿态（先存草稿、后提交，提交前不产生待办）
+- **抄送**：发起时选抄送人 + 流程内置 `cc` serviceTask（`${ccDelegate}`，完成时触发）；`cc_record` 表按（实例×人）去重，抄送人收到 CC 类通知；「抄送给我」页只读查看（`GET /api/process-instances/cc`）
+- **催办/撤回**：发起人对运行中实例可重复催办（`POST /api/tasks/{id}/remind`，绕过通知去重，不产生审批记录）；可撤回（`POST /api/process-instances/{id}/withdraw`，运行中/已拒绝均可，引擎实例删除 + 审批记录 CANCEL 留痕）
+- **审批日志**：`GET /api/process-instances/{id}/logs` 返回该实例全部审批记录时间线（升序，含转办/拒绝/撤回）；审批表单提供「常用意见」下拉快捷填充
 - **演示账号**（V3/V4 播种）：`admin/admin123`（含总经理与系统管理）、`manager/manager123`、`employee/employee123`、`finance/finance123`
 - 模板 XML 修改后经「流程模板」页面更新并部署新版本，**存量流程实例继续按旧版本跑到结束**（Flowable 语义）
 
@@ -123,7 +127,7 @@ cd frontend && npm install && npm run dev
 
 ### DDL 版本化（Flyway）
 
-- 业务表结构由 `backend/src/main/resources/db/migration/` 下的 Flyway 迁移管理：`V1__business_schema.sql`（9 张业务表）/ `V2__refresh_token.sql` / `V3__seed.sql`（admin/manager/employee 演示账号）；**新增表/改列必须新增迁移文件，禁止修改已发布迁移**
+- 业务表结构由 `backend/src/main/resources/db/migration/` 下的 Flyway 迁移管理：`common/`（双库兼容：`V1` 业务表 9 张 / `V2` refresh_token / `V3` 演示账号 / `V6` 抄送记录 / `V8` 实例抄送名单）+ `h2/` 与 `mysql/` 方言目录（`V5` 审批四态 CHECK / `V7` 抄送通知类型——H2 用 `DROP CONSTRAINT`、MySQL 用 `DROP CHECK`）；`V4` 财务账号在 `common/`；**新增表/改列必须新增迁移文件，禁止修改已发布迁移**（CHECK 放宽/枚举新值需追加新迁移）
 - **两档 profile 统一启用 Flyway**（H2 开发/测试 + MySQL 生产走同一条 DDL 路径）；`spring.sql.init.mode: never`——原 `data.sql` 播种已版本化为 `V3__seed.sql`（`WHERE NOT EXISTS` 幂等），不再有脚本/建表顺序问题
 - `mysql` profile：`ddl-auto: none`，建表完全交给 Flyway；`baseline-on-missing-version: true` 使**已有旧库**首次升级时自动打基线（保留存量数据，V1 视为已应用，直接执行 V2/V3）
 - 本地 H2（默认 profile）：`ddl-auto: update` 保留（实体漂移时自动补齐，仅内存库无副作用）
