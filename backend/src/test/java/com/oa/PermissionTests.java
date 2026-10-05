@@ -94,14 +94,27 @@ class PermissionTests {
                 .sorted().toList();
         assertEquals(expected, codes, "员工权限码 = NORMAL 组当前授权");
 
-        // 还原：恢复普通组基础权限与全员
+        // 还原：恢复普通组基础权限与全员（回归：初版误把全部权限授给普通组，
+        // 共享 H2 库污染后续测试类——如假期管理的 403 断言）
         permissionController.assignMembers(gid,
                 new PermissionController.IdsRequest() {
                     {
                         setIds(userRepository.findAll().stream().map(User::getId).collect(java.util.stream.Collectors.toSet()));
                     }
                 });
-        List<Long> basic = perms.stream().map(m -> ((Number) m.get("id")).longValue()).toList();
+        String[] basicCodes = {
+                "approval:start", "approval:view", "attendance:clock", "attendance:view",
+                "leave:apply", "leave:view", "document:create", "document:view",
+                "seal:apply", "contract:apply", "expense:apply", "expense:view",
+                "procurement:apply"
+        };
+        java.util.Map<String, Long> codeToId = new java.util.HashMap<>();
+        for (Map<String, Object> p : perms) {
+            codeToId.put((String) p.get("code"), ((Number) p.get("id")).longValue());
+        }
+        List<Long> basic = java.util.Arrays.stream(basicCodes).map(codeToId::get)
+                .filter(java.util.Objects::nonNull).toList();
+        assertEquals(13, basic.size(), "基础权限应恢复 13 项（与 PermissionSeeder 一致）");
         PermissionController.IdsRequest all = new PermissionController.IdsRequest();
         all.setIds(new java.util.LinkedHashSet<>(basic));
         permissionController.assignPermissions(gid, all);

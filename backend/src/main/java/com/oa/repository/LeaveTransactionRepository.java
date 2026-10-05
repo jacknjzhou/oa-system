@@ -30,6 +30,8 @@ public interface LeaveTransactionRepository extends JpaRepository<LeaveTransacti
 
     List<LeaveTransaction> findTop100ByUserIdOrderByCreatedAtDescIdDesc(Long userId);
 
+    long countByLeaveTypeId(Long leaveTypeId);
+
     /** 管理页日志查询（HD-01/03；显式 @Query：派生方法名无法表达 null 参数可选语义）。 */
     @Query("select t from LeaveTransaction t where (:userId is null or t.userId = :userId) "
             + "and (:typeId is null or t.leaveTypeId = :typeId) "

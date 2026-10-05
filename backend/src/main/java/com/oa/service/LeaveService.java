@@ -1,5 +1,6 @@
 package com.oa.service;
 
+import com.oa.dto.LeaveTypeRequest;
 import com.oa.entity.LeaveBalance;
 import com.oa.entity.LeaveTransaction;
 import com.oa.entity.LeaveType;
@@ -44,6 +45,91 @@ public class LeaveService {
         return leaveTypeRepository.findByEnabledTrueOrderByWeightDescIdAsc().stream()
                 .map(this::toTypeMap)
                 .toList();
+    }
+
+    // ==================== 类型管理（HD-04~06） ====================
+
+    /** 管理页列表（含停用类型）。 */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> adminListTypes() {
+        return leaveTypeRepository.findAllByOrderByWeightDescIdAsc().stream()
+                .map(this::toTypeMap)
+                .toList();
+    }
+
+    @Transactional
+    public Map<String, Object> createType(LeaveTypeRequest req) {
+        String code = (req.code() == null || req.code().isBlank())
+                ? req.name().trim() : req.code().trim().toUpperCase();
+        if (!code.matches("[A-Z0-9_\\u4e00-\\u9fa5]{1,32}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "代码仅可包含大写字母/数字/下划线/中文（≤32）: " + code);
+        }
+        if (leaveTypeRepository.findByCode(code).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "假期类型已存在: " + code);
+        }
+        LeaveType type = new LeaveType();
+        type.setCode(code);
+        applyRequest(type, req);
+        leaveTypeRepository.save(type);
+        return toTypeMap(type);
+    }
+
+    @Transactional
+    public Map<String, Object> updateType(Long id, LeaveTypeRequest req) {
+        LeaveType type = requireTypeEntity(id);
+        if (req.code() != null && !req.code().isBlank()) {
+            String code = req.code().trim().toUpperCase();
+            if (!code.matches("[A-Z0-9_\\u4e00-\\u9fa5]{1,32}")) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "代码仅可包含大写字母/数字/下划线/中文（≤32）: " + code);
+            }
+            leaveTypeRepository.findByCode(code).ifPresent(t -> {
+                if (!t.getId().equals(id)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "假期类型已存在: " + code);
+                }
+            });
+            type.setCode(code);
+        }
+        applyRequest(type, req);
+        leaveTypeRepository.save(type);
+        return toTypeMap(type);
+    }
+
+    /** 删除：有余额/流水引用的类型禁止删除（引导停用）。 */
+    @Transactional
+    public void deleteType(Long id) {
+        LeaveType type = requireTypeEntity(id);
+        long refs = leaveBalanceRepository.countByLeaveTypeId(id);
+        long txnRefs = leaveTransactionRepository.countByLeaveTypeId(id);
+        if (refs > 0 || txnRefs > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "该类型已有余额/流水记录，不能删除（可停用）");
+        }
+        leaveTypeRepository.delete(type);
+    }
+
+    private LeaveType requireTypeEntity(Long id) {
+        return leaveTypeRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "假期类型不存在"));
+    }
+
+    private void applyRequest(LeaveType type, LeaveTypeRequest req) {
+        type.setName(req.name().trim());
+        type.setCategory(req.category() == null || req.category().isBlank() ? "other" : req.category().trim());
+        String quotaType = req.quotaType() == null || req.quotaType().isBlank() ? "none" : req.quotaType().trim();
+        if (!List.of("fixed", "accrual", "none").contains(quotaType)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "额度类型仅支持 fixed/accrual/none");
+        }
+        type.setQuotaType(quotaType);
+        type.setAnnualQuota(req.annualQuota() == null ? 0 : req.annualQuota());
+        String unit = req.unit().trim();
+        if (!List.of("day", "hour", "half_day").contains(unit)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "单位仅支持 day/hour/half_day");
+        }
+        type.setUnit(unit);
+        type.setWeight(req.weight() == null ? 100 : req.weight());
+        type.setEnabled(req.enabled() == null ? Boolean.TRUE : req.enabled());
     }
 
     @Transactional(readOnly = true)
