@@ -60,11 +60,11 @@ export default function TemplateFormConfig({ fields, onChange }: TemplateFormCon
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[180px_1fr_260px]">
-      {/* 左栏：控件库 */}
-      <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-600 dark:bg-slate-900/40">
-        <h4 className="mb-2 text-xs font-semibold text-slate-500 dark:text-slate-400">控件库</h4>
-        <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+    <div className="grid h-full min-h-0 grid-cols-1 gap-3 lg:grid-cols-[190px_minmax(0,1fr)_280px]">
+      {/* 左栏：控件库（列内独立滚动，高度铺满） */}
+      <div className="flex min-h-0 flex-col rounded-lg border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-600 dark:bg-slate-900/40 max-lg:max-h-[320px]">
+        <h4 className="mb-2 shrink-0 text-xs font-semibold text-slate-500 dark:text-slate-400">控件库</h4>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
           {CONTROL_GROUPS.map((group) => (
             <div key={group}>
               <p className="mb-1 text-[11px] text-slate-400 dark:text-slate-500">{group}</p>
@@ -85,9 +85,9 @@ export default function TemplateFormConfig({ fields, onChange }: TemplateFormCon
         </div>
       </div>
 
-      {/* 中栏：表单画布 */}
-      <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-600">
-        <h4 className="mb-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+      {/* 中栏：表单画布（列内独立滚动，高度铺满） */}
+      <div className="flex min-h-0 flex-col rounded-lg border border-slate-200 p-3 dark:border-slate-600 max-lg:max-h-[360px]">
+        <h4 className="mb-2 shrink-0 text-xs font-semibold text-slate-500 dark:text-slate-400">
           表单画布（{fields.length} 个控件）
         </h4>
         {fields.length === 0 ? (
@@ -95,7 +95,7 @@ export default function TemplateFormConfig({ fields, onChange }: TemplateFormCon
             从左侧控件库点击控件添加
           </p>
         ) : (
-          <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
             {fields.map((field, index) => {
               const def = controlByType(field.type)
               const isSelected = field.key === selectedKey
@@ -158,13 +158,13 @@ export default function TemplateFormConfig({ fields, onChange }: TemplateFormCon
         )}
       </div>
 
-      {/* 右栏：属性面板 */}
-      <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-600">
-        <h4 className="mb-2 text-xs font-semibold text-slate-500 dark:text-slate-400">属性</h4>
+      {/* 右栏：属性面板（列内独立滚动，高度铺满） */}
+      <div className="flex min-h-0 flex-col rounded-lg border border-slate-200 p-3 dark:border-slate-600 max-lg:max-h-[420px]">
+        <h4 className="mb-2 shrink-0 text-xs font-semibold text-slate-500 dark:text-slate-400">属性</h4>
         {!selected ? (
           <p className="text-xs text-slate-400 dark:text-slate-500">点击画布中的控件编辑属性</p>
         ) : (
-          <div className="space-y-3 text-xs">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 text-xs">
             <div>
               <label className="font-medium text-slate-500 dark:text-slate-400">控件类型</label>
               <select

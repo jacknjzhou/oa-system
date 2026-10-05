@@ -87,6 +87,16 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
     }
   }, [])
 
+  // 画布尺寸变化时重排（切回表单 tab 后容器由 hidden 恢复 / 窗口缩放）
+  useEffect(() => {
+    if (tab !== 'form') modelerRef.current?.view?.resize()
+  }, [tab])
+  useEffect(() => {
+    const onResize = () => modelerRef.current?.view?.resize()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
   // 编辑模式：加载模板详情
   useEffect(() => {
     if (mode !== 'edit' || !id) return
@@ -402,9 +412,9 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
         </div>
       </div>
 
-      {/* 主体：左画布 + 右属性面板 */}
+      {/* 主体：左画布 +（表单 tab 时）全宽表单设计器 + 右属性面板 */}
       <div className="flex min-h-0 flex-1">
-        <div className="relative min-w-0 flex-1 bg-white dark:bg-slate-800">
+        <div className={`relative min-w-0 flex-1 bg-white dark:bg-slate-800 ${tab === 'form' ? 'hidden' : ''}`}>
           <div ref={containerRef} className="h-full w-full" />
           {tab === 'flow' && flowSource === 'visual' && (
             <div className="absolute inset-0 z-20 bg-white dark:bg-slate-800">
@@ -443,6 +453,13 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
             </div>
           )}
         </div>
+
+        {/* 表单设计器（form tab）：展开到全宽区域，避免窄列内嵌套滚动 */}
+        {tab === 'form' && (
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-50 p-4 dark:bg-slate-900/40">
+            <TemplateFormConfig fields={fields} onChange={setFields} />
+          </div>
+        )}
 
         {/* 右侧属性面板 */}
         <div className="flex w-80 shrink-0 flex-col border-l border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
@@ -485,7 +502,17 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
 
 
           <div className="flex-1 overflow-y-auto p-4">
-            {tab === 'flow' ? (
+            {tab === 'form' ? (
+              <div className="flex h-full flex-col items-center justify-center px-4 py-16 text-center">
+                <span className="mb-3 text-4xl" role="img" aria-hidden="true">
+                  📝
+                </span>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">表单设计器已展开</p>
+                <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                  请在左侧区域编辑表单控件
+                </p>
+              </div>
+            ) : tab === 'flow' ? (
               <div className="space-y-4">
                 <div>
                   <label className="form-label">流程来源</label>
@@ -506,8 +533,6 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
                     : '保存时将使用 bpmn-js 画布中的手绘流程图。'}
                 </p>
               </div>
-            ) : tab === 'form' ? (
-              <TemplateFormConfig fields={fields} onChange={setFields} />
             ) : !panel ? (
               <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
                 <span className="mb-3 text-4xl" role="img" aria-hidden="true">

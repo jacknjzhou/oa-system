@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { checkApi, type CheckAllRow } from '../api/check'
 import { userApi } from '../api/user'
+import AttendanceTabs from '../components/AttendanceTabs'
 import EmptyState, { ErrorState, LoadingState } from '../components/EmptyState'
 import { formatDateTime } from '../utils/format'
 
@@ -39,6 +40,7 @@ export default function AllAttendance() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
+      <AttendanceTabs />
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
         <input
           type="month"
