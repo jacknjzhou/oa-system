@@ -1,5 +1,6 @@
 package com.oa.config;
 
+import com.oa.bpmn.BpmnDiHealer;
 import com.oa.entity.ApprovalType;
 import com.oa.entity.ProcessDefinition;
 import com.oa.entity.User;
@@ -11,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +30,8 @@ import java.util.List;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+// 早于 ProcessDefinitionDeployer(200)：新建/修复的模板在同一次启动即部署到 Flowable 引擎
+@Order(150)
 public class ProcessTemplateSeeder implements ApplicationRunner {
 
     private final ProcessDefinitionRepository definitionRepository;
@@ -46,7 +51,10 @@ public class ProcessTemplateSeeder implements ApplicationRunner {
         // 请假/采购完整模板 + 15 个系统审批预设（幂等；先建模板再绑类型）
         seedLeaveTemplate();
         seedProcurementTemplate();
+        seedSystemTemplates();
         seedSystemApprovalTypes();
+        // 存量模板 DI 自愈：无 BPMNDiagram 的 bpmnXml 补布局（幂等，一次日志）
+        healMissingDi();
         // 预置演示主管关系（“发起人主管”审批人解析演示）：幂等，已设置则不动
         seedSupervisors();
     }
@@ -83,19 +91,297 @@ public class ProcessTemplateSeeder implements ApplicationRunner {
             type.setDescription(p[4]);
             type.setWeight((int) approvalTypeRepository.count() + 10);
             type.setEnabled(true);
-            if ("PROCUREMENT".equals(p[0])) {
-                type.setDef(definitionRepository.findByDefKey("procurement").stream().findFirst().orElse(null));
-            } else if ("LEAVE".equals(p[0])) {
-                type.setDef(definitionRepository.findByDefKey("leave").stream().findFirst().orElse(null));
-            } else if ("DOCUMENT".equals(p[0])) {
-                type.setDef(definitionRepository.findByDefKey("document").stream().findFirst().orElse(null));
-            }
+            bindTypeToTemplate(type);
             approvalTypeRepository.save(type);
             created++;
         }
         if (created > 0) {
             log.info("已预置 {} 个系统审批类型（15 类系统预设）", created);
         }
+        // 存量类型补绑：code 小写 == defKey 的模板存在且类型未绑时绑定
+        for (ApprovalType type : approvalTypeRepository.findAll()) {
+            if (type.getDef() == null) {
+                bindTypeToTemplate(type);
+                if (type.getDef() != null) {
+                    approvalTypeRepository.save(type);
+                }
+            }
+        }
+    }
+
+    /** 绑定规则：defKey = code 小写（leave/procurement/travel/... 与模板 defKey 约定一致）。 */
+    private void bindTypeToTemplate(ApprovalType type) {
+        if (type.getDef() != null) {
+            return;
+        }
+        ProcessDefinition def = definitionRepository
+                .findByDefKey(type.getCode().toLowerCase())
+                .stream().findFirst().orElse(null);
+        if (def != null) {
+            type.setDef(def);
+        }
+    }
+
+    /**
+     * 系统模板蓝图（13 个缺模板的预置类型）：表单 + 节点链（主管/角色）+ 自动生成 BPMN（含 DI）。
+     * 节点 approverType=supervisor 时前端由发起人主管代审（${supervisorUsername}）。
+     */
+    private record TemplateBlueprint(String defKey, String name, String category, String description,
+                                     String formConfig, List<FlowNodeBlueprint> nodes) {
+    }
+
+    private record FlowNodeBlueprint(String id, String name, String approverType, String roles, String signMode) {
+    }
+
+    private static FlowNodeBlueprint node(String id, String name, String roles) {
+        return new FlowNodeBlueprint(id, name, "role", roles, "single");
+    }
+
+    private static FlowNodeBlueprint supervisor(String id, String name) {
+        return new FlowNodeBlueprint(id, name, "supervisor", "", "single");
+    }
+
+    /** 13 个系统模板蓝图（与前端 15 类型卡片对齐；报销/请假/采购/公文已有模板的不变）。 */
+    private List<TemplateBlueprint> systemTemplates() {
+        return List.of(
+                new TemplateBlueprint("travel", "出差申请", "财务",
+                        "出差申请：主管→经理",
+                        "{\"fields\":["
+                                + "{\"key\":\"destination\",\"label\":\"出差地点\",\"type\":\"input\",\"required\":true,\"placeholder\":\"如：上海\"},"
+                                + "{\"key\":\"tripRange\",\"label\":\"出差时段\",\"type\":\"dateRange\",\"required\":true},"
+                                + "{\"key\":\"days\",\"label\":\"出差天数\",\"type\":\"number\",\"required\":true,\"min\":0,\"max\":60,\"unit\":\"天\"},"
+                                + "{\"key\":\"reason\",\"label\":\"出差事由\",\"type\":\"textarea\",\"required\":true}"
+                                + "]}"
+                        , List.of(supervisor("supervisorApprove", "主管审批"), node("managerApprove", "经理审批", "MANAGER"))),
+                new TemplateBlueprint("overtime", "加班申请", "考勤",
+                        "加班申请：经理审批",
+                        "{\"fields\":["
+                                + "{\"key\":\"overtimeDate\",\"label\":\"加班日期\",\"type\":\"date\",\"required\":true},"
+                                + "{\"key\":\"hours\",\"label\":\"加班时长\",\"type\":\"number\",\"required\":true,\"min\":0,\"max\":24,\"unit\":\"小时\"},"
+                                + "{\"key\":\"reason\",\"label\":\"加班事由\",\"type\":\"textarea\",\"required\":false}"
+                                + "]}"
+                        , List.of(node("managerApprove", "经理审批", "MANAGER"))),
+                new TemplateBlueprint("outside", "外出申请", "考勤",
+                        "外出申请：经理审批",
+                        "{\"fields\":["
+                                + "{\"key\":\"outsideDate\",\"label\":\"外出日期\",\"type\":\"date\",\"required\":true},"
+                                + "{\"key\":\"timeRange\",\"label\":\"外出去返时间\",\"type\":\"dateRange\",\"required\":true},"
+                                + "{\"key\":\"destination\",\"label\":\"外出去向\",\"type\":\"input\",\"required\":true},"
+                                + "{\"key\":\"reason\",\"label\":\"外出事由\",\"type\":\"textarea\",\"required\":true}"
+                                + "]}"
+                        , List.of(node("managerApprove", "经理审批", "MANAGER"))),
+                new TemplateBlueprint("punch_fix", "补卡申请", "考勤",
+                        "打卡补录：经理审批",
+                        "{\"fields\":["
+                                + "{\"key\":\"fixDate\",\"label\":\"补卡日期\",\"type\":\"date\",\"required\":true},"
+                                + "{\"key\":\"inTime\",\"label\":\"应到时间\",\"type\":\"input\",\"required\":false,\"placeholder\":\"如 09:00\"},"
+                                + "{\"key\":\"outTime\",\"label\":\"应走时间\",\"type\":\"input\",\"required\":false,\"placeholder\":\"如 18:00\"},"
+                                + "{\"key\":\"reason\",\"label\":\"补卡原因\",\"type\":\"textarea\",\"required\":true}"
+                                + "]}"
+                        , List.of(node("managerApprove", "经理审批", "MANAGER"))),
+                new TemplateBlueprint("seal_use", "用章申请", "行政",
+                        "公章使用：经理→总经理",
+                        "{\"fields\":["
+                                + "{\"key\":\"sealType\",\"label\":\"印章类型\",\"type\":\"select\",\"required\":true,\"options\":[\"公章\",\"合同章\",\"财务章\",\"法人章\"]},"
+                                + "{\"key\":\"usage\",\"label\":\"用章文件/用途\",\"type\":\"input\",\"required\":true},"
+                                + "{\"key\":\"useDate\",\"label\":\"用章日期\",\"type\":\"date\",\"required\":false},"
+                                + "{\"key\":\"returnDate\",\"label\":\"归还日期\",\"type\":\"date\",\"required\":false}"
+                                + "]}"
+                        , List.of(node("managerApprove", "经理审批", "MANAGER"), node("adminApprove", "总经理审批", "ADMIN"))),
+                new TemplateBlueprint("car_use", "用车申请", "行政",
+                        "公务用车：行政审批",
+                        "{\"fields\":["
+                                + "{\"key\":\"useRange\",\"label\":\"用车时段\",\"type\":\"dateRange\",\"required\":true},"
+                                + "{\"key\":\"destination\",\"label\":\"目的地\",\"type\":\"input\",\"required\":true},"
+                                + "{\"key\":\"reason\",\"label\":\"用车事由\",\"type\":\"textarea\",\"required\":false}"
+                                + "]}"
+                        , List.of(node("adminApprove", "行政审批", "ADMIN"))),
+                new TemplateBlueprint("contract", "合同审批", "管理",
+                        "合同审批：经理→总经理",
+                        "{\"fields\":["
+                                + "{\"key\":\"counterparty\",\"label\":\"合同对方\",\"type\":\"input\",\"required\":true},"
+                                + "{\"key\":\"amount\",\"label\":\"合同金额\",\"type\":\"amount\",\"required\":true,\"unit\":\"元\",\"min\":0},"
+                                + "{\"key\":\"signDate\",\"label\":\"签订日期\",\"type\":\"date\",\"required\":false},"
+                                + "{\"key\":\"riskNote\",\"label\":\"风险说明\",\"type\":\"textarea\",\"required\":false}"
+                                + "]}"
+                        , List.of(node("managerApprove", "经理审批", "MANAGER"), node("adminApprove", "总经理审批", "ADMIN"))),
+                new TemplateBlueprint("payment", "付款申请", "财务",
+                        "付款申请：经理→财务",
+                        "{\"fields\":["
+                                + "{\"key\":\"payee\",\"label\":\"收款方\",\"type\":\"input\",\"required\":true},"
+                                + "{\"key\":\"amount\",\"label\":\"付款金额\",\"type\":\"amount\",\"required\":true,\"unit\":\"元\",\"min\":0},"
+                                + "{\"key\":\"payDate\",\"label\":\"付款日期\",\"type\":\"date\",\"required\":false},"
+                                + "{\"key\":\"reason\",\"label\":\"付款事由\",\"type\":\"textarea\",\"required\":true}"
+                                + "]}"
+                        , List.of(node("managerApprove", "经理审批", "MANAGER"), node("financeApprove", "财务审批", "FINANCE"))),
+                new TemplateBlueprint("advance", "预支申请", "财务",
+                        "工资/费用预支：经理→财务",
+                        "{\"fields\":["
+                                + "{\"key\":\"amount\",\"label\":\"预支金额\",\"type\":\"amount\",\"required\":true,\"unit\":\"元\",\"min\":0},"
+                                + "{\"key\":\"month\",\"label\":\"预支月份\",\"type\":\"input\",\"required\":false,\"placeholder\":\"如 2026-10\"},"
+                                + "{\"key\":\"reason\",\"label\":\"预支事由\",\"type\":\"textarea\",\"required\":true}"
+                                + "]}"
+                        , List.of(node("managerApprove", "经理审批", "MANAGER"), node("financeApprove", "财务审批", "FINANCE"))),
+                new TemplateBlueprint("regularization", "转正申请", "人事",
+                        "试用期转正：经理→总经理",
+                        "{\"fields\":["
+                                + "{\"key\":\"joinDate\",\"label\":\"入职日期\",\"type\":\"date\",\"required\":false},"
+                                + "{\"key\":\"selfSummary\",\"label\":\"工作总结\",\"type\":\"textarea\",\"required\":true,\"placeholder\":\"试用期工作成果与自我评估\"}"
+                                + "]}"
+                        , List.of(node("managerApprove", "经理审批", "MANAGER"), node("adminApprove", "总经理审批", "ADMIN"))),
+                new TemplateBlueprint("recruitment", "招聘申请", "人事",
+                        "招聘申请：经理→总经理",
+                        "{\"fields\":["
+                                + "{\"key\":\"position\",\"label\":\"招聘岗位\",\"type\":\"input\",\"required\":true},"
+                                + "{\"key\":\"headcount\",\"label\":\"招聘人数\",\"type\":\"number\",\"required\":true,\"min\":1,\"max\":20,\"unit\":\"人\"},"
+                                + "{\"key\":\"level\",\"label\":\"期望职级\",\"type\":\"input\",\"required\":false},"
+                                + "{\"key\":\"reason\",\"label\":\"招聘原因\",\"type\":\"textarea\",\"required\":true}"
+                                + "]}"
+                        , List.of(node("managerApprove", "经理审批", "MANAGER"), node("adminApprove", "总经理审批", "ADMIN"))),
+                new TemplateBlueprint("resignation", "离职申请", "人事",
+                        "离职申请：经理→总经理",
+                        "{\"fields\":["
+                                + "{\"key\":\"lastWorkDate\",\"label\":\"最后工作日\",\"type\":\"date\",\"required\":true},"
+                                + "{\"key\":\"handover\",\"label\":\"工作交接说明\",\"type\":\"textarea\",\"required\":false},"
+                                + "{\"key\":\"reason\",\"label\":\"离职原因\",\"type\":\"textarea\",\"required\":true}"
+                                + "]}"
+                        , List.of(node("managerApprove", "经理审批", "MANAGER"), node("adminApprove", "总经理审批", "ADMIN"))),
+                new TemplateBlueprint("document", "公文签发", "公文",
+                        "公文签发：经理→总经理",
+                        "{\"fields\":["
+                                + "{\"key\":\"docTitle\",\"label\":\"公文标题\",\"type\":\"input\",\"required\":true},"
+                                + "{\"key\":\"docType\",\"label\":\"公文类型\",\"type\":\"select\",\"required\":true,\"options\":[\"通知\",\"报告\",\"请示\",\"函\",\"纪要\"]},"
+                                + "{\"key\":\"urgency\",\"label\":\"紧急程度\",\"type\":\"select\",\"required\":false,\"options\":[\"普通\",\"紧急\",\"特急\"]},"
+                                + "{\"key\":\"content\",\"label\":\"正文内容\",\"type\":\"textarea\",\"required\":true}"
+                                + "]}"
+                        , List.of(node("managerApprove", "经理审批", "MANAGER"), node("adminSign", "签发", "ADMIN"))));
+    }
+
+    /**
+     * 幂等补种 13 个系统模板（defKey 已存在则跳过）。
+     * BPMN 由节点蓝图生成并过 ensureDi（保证流程图可渲染）。
+     */
+    private void seedSystemTemplates() {
+        User admin = userRepository.findByUsername("admin").orElse(null);
+        int created = 0;
+        for (TemplateBlueprint bp : systemTemplates()) {
+            if (!definitionRepository.findByDefKey(bp.defKey()).isEmpty()) {
+                continue;
+            }
+            ProcessDefinition def = new ProcessDefinition();
+            def.setDefKey(bp.defKey());
+            def.setName(bp.name());
+            def.setVersion(1);
+            def.setCategory(bp.category());
+            def.setDescription(bp.description());
+            def.setFormConfig(bp.formConfig());
+            def.setBpmnXml(BpmnDiHealer.ensureDi(buildBlueprintBpmn(bp)));
+            def.setFlowSpec(buildFlowSpecJson(bp.nodes()));
+            def.setStatus(ProcessDefinitionStatus.PUBLISHED);
+            def.setCreator(admin);
+            def.setPublishedAt(LocalDateTime.now());
+            definitionRepository.save(def);
+            created++;
+        }
+        if (created > 0) {
+            log.info("已补种 {} 个系统审批模板（13 类预置类型全覆盖）", created);
+        }
+    }
+
+    /** 由节点蓝图生成链式 BPMN（与前端设计器 buildFlowBpmnXml 同构）：主管节点前置解析 serviceTask。 */
+    private String buildBlueprintBpmn(TemplateBlueprint bp) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        sb.append("<definitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\""
+                + " xmlns:flowable=\"http://flowable.org/bpmn\" id=\"DEF_" + bp.defKey()
+                + "\" targetNamespace=\"http://oa.local/" + bp.defKey() + "\">\n");
+        sb.append("  <process id=\"").append(bp.defKey()).append("\" name=\"")
+                .append(escXml(bp.name())).append("\" isExecutable=\"true\">\n");
+        sb.append("    <startEvent id=\"start\" name=\"发起\"/>\n");
+        String prev = "start";
+        for (FlowNodeBlueprint n : bp.nodes()) {
+            if ("supervisor".equals(n.approverType())) {
+                String prepId = "prep_" + n.id();
+                sb.append("    <sequenceFlow id=\"f_").append(prev).append('_').append(prepId)
+                        .append("\" sourceRef=\"").append(prev).append("\" targetRef=\"").append(prepId).append("\"/>\n");
+                sb.append("    <serviceTask id=\"").append(prepId)
+                        .append("\" name=\"解析发起人主管\" flowable:delegateExpression=\"${assignSupervisorDelegate}\"/>\n");
+                prev = prepId;
+            }
+            sb.append("    <sequenceFlow id=\"f_").append(prev).append('_').append(n.id())
+                    .append("\" sourceRef=\"").append(prev).append("\" targetRef=\"").append(n.id()).append("\"/>\n");
+            if ("supervisor".equals(n.approverType())) {
+                sb.append("    <userTask id=\"").append(n.id()).append("\" name=\"").append(escXml(n.name()))
+                        .append("\" flowable:candidateUsers=\"${supervisorUsername}\"/>\n");
+            } else {
+                sb.append("    <userTask id=\"").append(n.id()).append("\" name=\"").append(escXml(n.name()))
+                        .append("\" flowable:candidateGroups=\"").append(n.roles()).append("\"/>\n");
+            }
+            prev = n.id();
+        }
+        sb.append("    <sequenceFlow id=\"f_").append(prev).append("_end\" sourceRef=\"").append(prev)
+                .append("\" targetRef=\"end\"/>\n");
+        sb.append("    <endEvent id=\"end\" name=\"结束\"/>\n");
+        sb.append("  </process>\n");
+        sb.append("</definitions>");
+        return sb.toString();
+    }
+
+    /** 节点蓝图 → flowSpec JSON（前端 FlowSpec 契约）。 */
+    private String buildFlowSpecJson(List<FlowNodeBlueprint> nodes) {
+        StringBuilder sb = new StringBuilder("{\"nodes\":[");
+        for (int i = 0; i < nodes.size(); i++) {
+            FlowNodeBlueprint n = nodes.get(i);
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append("{\"id\":\"").append(n.id())
+                    .append("\",\"name\":\"").append(escJson(n.name()))
+                    .append("\",\"approverType\":\"").append(n.approverType())
+                    .append("\",\"roles\":[");
+            if (!n.roles().isBlank()) {
+                String[] roles = n.roles().split(",");
+                for (int j = 0; j < roles.length; j++) {
+                    if (j > 0) {
+                        sb.append(',');
+                    }
+                    sb.append("\"").append(roles[j].trim()).append("\"");
+                }
+            }
+            sb.append("],\"signMode\":\"").append(n.signMode()).append("\"}");
+        }
+        return sb.append("]}").toString();
+    }
+
+    /**
+     * 存量模板 DI 自愈：bpmnXml 缺 BPMNDiagram 的补布局并落库。
+     * 幂等：修复后含 BPMNDiagram，下次启动跳过。
+     */
+    private void healMissingDi() {
+        int healed = 0;
+        for (ProcessDefinition def : definitionRepository.findAll()) {
+            String xml = def.getBpmnXml();
+            if (xml == null || xml.isBlank() || BpmnDiHealer.hasDi(xml)) {
+                continue;
+            }
+            String fixed = BpmnDiHealer.ensureDi(xml);
+            if (!fixed.equals(xml)) {
+                def.setBpmnXml(fixed);
+                definitionRepository.save(def);
+                healed++;
+            }
+        }
+        if (healed > 0) {
+            log.info("已为 {} 个存量模板补齐流程图 DI（修复流程图空白）", healed);
+        }
+    }
+
+    private static String escXml(String s) {
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+    }
+
+    private static String escJson(String s) {
+        return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private void seedSupervisors() {
@@ -216,6 +502,11 @@ public class ProcessTemplateSeeder implements ApplicationRunner {
                 </bpmn:definitions>""".formatted(processId, processId, name, taskName);
     }
 
+    /** simpleBpmn 结果过 DI 自愈（新装库直接带布局）。 */
+    private static String simpleBpmnWithDi(String processId, String name, String taskName) {
+        return BpmnDiHealer.ensureDi(simpleBpmn(processId, name, taskName));
+    }
+
     private void seedLeaveTemplate() throws Exception {
         if (!definitionRepository.findByDefKey("leave").isEmpty()) {
             return;
@@ -234,7 +525,7 @@ public class ProcessTemplateSeeder implements ApplicationRunner {
                   {"key":"days","label":"请假天数","type":"number","required":true,"min":0,"max":60,"unit":"天"},
                   {"key":"reason","label":"请假事由","type":"textarea","required":true,"placeholder":"请说明请假原因"}
                 ]}""");
-        def.setBpmnXml(simpleBpmn("leave", "请假审批", "经理审批"));
+        def.setBpmnXml(simpleBpmnWithDi("leave", "请假审批", "经理审批"));
         def.setFlowSpec("{\"nodes\":[{\"id\":\"managerApprove\",\"name\":\"经理审批\",\"approverType\":\"role\",\"roles\":[\"MANAGER\"],\"signMode\":\"single\"}]}");
         def.setStatus(ProcessDefinitionStatus.PUBLISHED);
         def.setCreator(admin);
@@ -261,7 +552,7 @@ public class ProcessTemplateSeeder implements ApplicationRunner {
                   {"key":"supplier","label":"供应商","type":"input","required":false},
                   {"key":"reason","label":"采购用途","type":"textarea","required":true}
                 ]}""");
-        def.setBpmnXml(simpleBpmn("procurement", "采购审批", "经理审批"));
+        def.setBpmnXml(simpleBpmnWithDi("procurement", "采购审批", "经理审批"));
         def.setFlowSpec("{\"nodes\":[{\"id\":\"managerApprove\",\"name\":\"经理审批\",\"approverType\":\"role\",\"roles\":[\"MANAGER\"],\"signMode\":\"single\"}]}");
         def.setStatus(ProcessDefinitionStatus.PUBLISHED);
         def.setCreator(admin);

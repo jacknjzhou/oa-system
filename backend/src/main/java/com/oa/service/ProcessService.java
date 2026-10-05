@@ -93,6 +93,8 @@ public class ProcessService {
 
     @Transactional
     public DefinitionDTO createDefinition(ProcessDefinitionRequest req) {
+        // DI 自愈：前端设计器/贴入的 XML 缺 BPMNDiagram 时补布局，避免流程图渲染空白
+        req.setBpmnXml(com.oa.bpmn.BpmnDiHealer.ensureDi(req.getBpmnXml()));
         if (hasText(req.getBpmnXml())) {
             String processKey = bpmnXmlService.extractProcessKey(req.getBpmnXml());
             if (!processKey.equals(req.getDefKey())) {
@@ -126,6 +128,7 @@ public class ProcessService {
 
     @Transactional
     public DefinitionDTO updateDefinition(Long id, ProcessDefinitionRequest req) {
+        req.setBpmnXml(com.oa.bpmn.BpmnDiHealer.ensureDi(req.getBpmnXml()));
         ProcessDefinition def = loadDefinition(id);
         if (hasText(req.getBpmnXml())) {
             String processKey = bpmnXmlService.extractProcessKey(req.getBpmnXml());
