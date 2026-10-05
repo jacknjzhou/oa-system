@@ -119,6 +119,60 @@ public class LeaveController {
         return ApiResponse.success();
     }
 
+    // ==================== 假期管理查询（HD-01/02/03/08） ====================
+
+    @GetMapping("/admin/departments")
+    @Transactional(readOnly = true)
+    public ApiResponse<List<Map<String, Object>>> adminDepartments() {
+        requireLeaveManage();
+        return ApiResponse.success(leaveService.adminDepartments());
+    }
+
+    @GetMapping("/admin/employees")
+    @Transactional(readOnly = true)
+    public ApiResponse<List<Map<String, Object>>> adminEmployees(
+            @RequestParam(required = false) Long orgId,
+            @RequestParam(required = false) String typeCode,
+            @RequestParam(required = false) String keyword) {
+        requireLeaveManage();
+        return ApiResponse.success(leaveService.adminEmployees(orgId, typeCode, keyword));
+    }
+
+    @GetMapping("/admin/balances/{userId}")
+    @Transactional(readOnly = true)
+    public ApiResponse<List<Map<String, Object>>> adminBalances(@PathVariable Long userId) {
+        requireLeaveManage();
+        return ApiResponse.success(leaveService.adminBalances(userId));
+    }
+
+    @GetMapping("/admin/logs")
+    @Transactional(readOnly = true)
+    public ApiResponse<Map<String, Object>> adminLogs(
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) String typeCode,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        requireLeaveManage();
+        return ApiResponse.success(leaveService.adminLogs(userId, typeCode, page, size));
+    }
+
+    /** 余额导出 CSV（HD-08）。 */
+    @GetMapping("/admin/export")
+    @Transactional(readOnly = true)
+    public org.springframework.http.ResponseEntity<String> adminExport(
+            @RequestParam(required = false) Long orgId,
+            @RequestParam(required = false) String typeCode,
+            @RequestParam(required = false) String keyword) {
+        requireLeaveManage();
+        String csv = leaveService.adminExport(orgId, typeCode, keyword);
+        String filename = "leave-balances-" + java.time.LocalDate.now() + ".csv";
+        return org.springframework.http.ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + filename + "\"")
+                .contentType(org.springframework.http.MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                .body(csv);
+    }
+
     /** 授予/调整余额（HD-07）：action 分发 SET_QUOTA / SET_REMAINING；操作人=当前登录用户。 */
     @PostMapping("/admin/grant")
     @Transactional

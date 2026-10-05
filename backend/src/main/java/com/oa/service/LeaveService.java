@@ -4,10 +4,13 @@ import com.oa.dto.LeaveTypeRequest;
 import com.oa.entity.LeaveBalance;
 import com.oa.entity.LeaveTransaction;
 import com.oa.entity.LeaveType;
+import com.oa.entity.Organization;
 import com.oa.entity.User;
+import com.oa.enums.UserStatus;
 import com.oa.repository.LeaveBalanceRepository;
 import com.oa.repository.LeaveTransactionRepository;
 import com.oa.repository.LeaveTypeRepository;
+import com.oa.repository.OrganizationRepository;
 import com.oa.repository.UserRepository;
 import com.oa.enums.UserStatus;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +41,7 @@ public class LeaveService {
     private final LeaveBalanceRepository leaveBalanceRepository;
     private final LeaveTransactionRepository leaveTransactionRepository;
     private final UserRepository userRepository;
+    private final OrganizationRepository organizationRepository;
 
     // ==================== 查询 ====================
 
@@ -151,63 +155,122 @@ public class LeaveService {
         return List.of(row);
     }
 
-    /** 管理端余额分页（HD-01）。 */
-    @Transactional(readOnly = true)
-    public List<Map<String, Object>> adminBalances(Long userId, String keyword, String typeCode, int page, int size) {
-        List<User> users = keyword == null || keyword.isBlank()
-                ? List.of()
-                : userRepository.findAll().stream()
-                        .filter(u -> matchesKeyword(u, keyword))
-                        .toList();
-        Long typeId = typeCode == null || typeCode.isBlank() ? null : requireType(typeCode).getId();
+    // ==================== HD-01/02/03/08：假期管理（ADMIN） ====================
 
-        List<Long> userIds = users.stream().map(User::getId).toList();
-        List<Long> typeIds = typeId == null
-                ? leaveTypeRepository.findAll().stream().map(LeaveType::getId).toList()
-                : List.of(typeId);
-        Map<Long, LeaveType> typeById = leaveTypeRepository.findAllById(typeIds).stream()
-                .collect(java.util.stream.Collectors.toMap(LeaveType::getId, t -> t));
-        Map<Long, LeaveBalance> balanceByPair = new java.util.HashMap<>();
-        if (!userIds.isEmpty() && !typeIds.isEmpty()) {
-            for (LeaveBalance b : leaveBalanceRepository.findByUserIdInAndLeaveTypeIdIn(userIds, typeIds)) {
-                balanceByPair.put(b.getUserId() * 1_000_000L + b.getLeaveTypeId(), b);
-            }
-        }
+    /** 部门列表（HD-01 筛选下拉）：全部部门 + 在职人数。 */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> adminDepartments() {
+        List<User> active = userRepository.findAll().stream()
+                .filter(u -> u.getStatus() == UserStatus.ACTIVE).toList();
+        return organizationRepository.findAll().stream()
+                .filter(o -> "DEPT".equalsIgnoreCase(o.getOrgType()))
+                .sorted(java.util.Comparator.comparing(
+                        com.oa.entity.Organization::getSortOrder,
+                        java.util.Comparator.nullsLast(Integer::compareTo)))
+                .map(o -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", o.getId());
+                    m.put("orgCode", o.getOrgCode());
+                    m.put("orgName", o.getOrgName());
+                    long count = active.stream()
+                            .filter(u -> o.getId().equals(u.getOrg() == null ? null : u.getOrg().getId()))
+                            .count();
+                    m.put("memberCount", count);
+                    return m;
+                }).toList();
+    }
+
+    /**
+     * 员工列表（HD-01）：按部门/关键字筛选在职员工，嵌套各假期余额；
+     * 不限额类型 quota/used/frozen/available 返回 null（前端显示“不限额”）。
+     */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> adminEmployees(Long orgId, String typeCode, String keyword) {
+        List<LeaveType> types = selectTypes(typeCode);
+        List<User> users = userRepository.findAll().stream()
+                .filter(u -> u.getStatus() == UserStatus.ACTIVE)
+                .filter(u -> orgId == null || orgId.equals(u.getOrg() == null ? null : u.getOrg().getId()))
+                .filter(u -> keyword == null || keyword.isBlank() || matchesKeyword(u, keyword))
+                .toList();
         if (users.isEmpty()) {
-            // 关键字命中为空
             return List.of();
         }
-        List<Map<String, Object>> rows = new ArrayList<>();
-        for (User u : users) {
-            for (LeaveType type : typeById.values()) {
-                LeaveBalance b = balanceByPair.get(u.getId() * 1_000_000L + type.getId());
-                if (b == null) {
-                    continue;
-                }
-                Map<String, Object> m = new LinkedHashMap<>();
-                m.put("userId", u.getId());
-                m.put("userName", u.getRealName());
-                m.put("userCode", u.getUsername());
-                m.put("orgId", u.getOrg() == null ? null : u.getOrg().getId());
-                m.put("orgName", u.getOrg() == null ? null : u.getOrg().getOrgName());
-                m.put("typeCode", type.getCode());
-                m.put("typeName", type.getName());
-                m.put("unit", type.getUnit());
+        Map<Long, LeaveBalance> balanceByPair = loadBalances(
+                users.stream().map(User::getId).toList(),
+                types.stream().map(LeaveType::getId).toList());
+        return users.stream().map(u -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", u.getId());
+            m.put("username", u.getUsername());
+            m.put("realName", u.getRealName());
+            m.put("orgId", u.getOrg() == null ? null : u.getOrg().getId());
+            m.put("orgName", u.getOrg() == null ? null : u.getOrg().getOrgName());
+            m.put("position", u.getPosition());
+            m.put("balances", balancesFor(u, types, balanceByPair));
+            return m;
+        }).toList();
+    }
+
+    /** 单员工全部余额（HD-02 余额详情页数据源）。 */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> adminBalances(Long userId) {
+        User u = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "用户不存在"));
+        List<LeaveType> types = selectTypes(null);
+        Map<Long, LeaveBalance> balanceByPair = loadBalances(
+                List.of(u.getId()), types.stream().map(LeaveType::getId).toList());
+        return balancesFor(u, types, balanceByPair);
+    }
+
+    private List<LeaveType> selectTypes(String typeCode) {
+        return typeCode == null || typeCode.isBlank()
+                ? leaveTypeRepository.findAll().stream()
+                        .sorted(java.util.Comparator.comparing(LeaveType::getWeight,
+                                java.util.Comparator.reverseOrder()))
+                        .toList()
+                : List.of(requireType(typeCode));
+    }
+
+    private Map<Long, LeaveBalance> loadBalances(List<Long> userIds, List<Long> typeIds) {
+        Map<Long, LeaveBalance> map = new java.util.HashMap<>();
+        if (userIds.isEmpty() || typeIds.isEmpty()) {
+            return map;
+        }
+        for (LeaveBalance b : leaveBalanceRepository.findByUserIdInAndLeaveTypeIdIn(userIds, typeIds)) {
+            map.put(b.getUserId() * 1_000_000L + b.getLeaveTypeId(), b);
+        }
+        return map;
+    }
+
+    /** 员工×类型的余额行（无限额 → 数值列 null）。 */
+    private List<Map<String, Object>> balancesFor(User u, List<LeaveType> types, Map<Long, LeaveBalance> balanceByPair) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (LeaveType type : types) {
+            LeaveBalance b = balanceByPair.get(u.getId() * 1_000_000L + type.getId());
+            boolean has = b != null;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("code", type.getCode());
+            m.put("name", type.getName());
+            m.put("unit", type.getUnit());
+            m.put("limited", type.isLimited());
+            m.put("weight", type.getWeight());
+            if (has && type.isLimited()) {
                 m.put("quota", nvl(b.getQuota()));
                 m.put("used", nvl(b.getUsed()));
                 m.put("frozen", nvl(b.getFrozen()));
                 m.put("available", b.available());
-                rows.add(m);
+            } else {
+                m.put("quota", null);
+                m.put("used", null);
+                m.put("frozen", null);
+                m.put("available", null);
             }
+            out.add(m);
         }
-        int from = Math.max(0, page * size);
-        if (from >= rows.size()) {
-            return List.of();
-        }
-        return rows.subList(from, Math.min(rows.size(), from + size));
+        return out;
     }
 
-    /** 管理端日志分页（HD-03/08）。 */
+    /** 管理端日志分页（HD-03/08）：rows 与 adminLogs.items 同源。 */
     @Transactional(readOnly = true)
     public Map<String, Object> adminLedger(Long userId, String typeCode, String txnType,
                                            String ref, int page, int size) {
@@ -229,6 +292,56 @@ public class LeaveService {
         out.put("rows", result.getContent().stream()
                 .map(t -> toTxnMap(t, typeById.get(t.getLeaveTypeId()), userById)).toList());
         return out;
+    }
+
+    /** 假期管理日志（HD-03）：items 命名对齐前端；typeLabel 中文标签 + instanceId 直存。 */
+    @Transactional(readOnly = true)
+    public Map<String, Object> adminLogs(Long userId, String typeCode, int page, int size) {
+        Map<String, Object> core = adminLedger(userId, typeCode, null, null, page, size);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("total", core.get("total"));
+        out.put("items", core.get("rows"));
+        return out;
+    }
+
+    /** 余额导出 CSV（HD-08）：员工/部门/假期类型/额度/已用/冻结/剩余/单位。 */
+    @Transactional(readOnly = true)
+    public String adminExport(Long orgId, String typeCode, String keyword) {
+        StringBuilder sb = new StringBuilder("\uFEFF"); // BOM：Excel 中文兼容
+        String[] header = {"员工", "账号", "部门", "假期类型", "单位", "额度", "已用", "冻结", "剩余"};
+        sb.append(String.join(",", header)).append('\n');
+        for (Map<String, Object> emp : adminEmployees(orgId, typeCode, keyword)) {
+            for (Map<String, Object> b : (List<Map<String, Object>>) emp.get("balances")) {
+                sb.append(csvCell((String) emp.get("realName")))
+                        .append(',').append(csvCell((String) emp.get("username")))
+                        .append(',').append(csvCell((String) emp.get("orgName")))
+                        .append(',').append(csvCell((String) b.get("name")))
+                        .append(',').append(csvCell((String) b.get("unit")))
+                        .append(',').append(csvCell(balanceText(b.get("quota"), !Boolean.TRUE.equals(b.get("limited")))))
+                        .append(',').append(csvCell(balanceText(b.get("used"), !Boolean.TRUE.equals(b.get("limited")))))
+                        .append(',').append(csvCell(balanceText(b.get("frozen"), !Boolean.TRUE.equals(b.get("limited")))))
+                        .append(',').append(csvCell(balanceText(b.get("available"), !Boolean.TRUE.equals(b.get("limited")))))
+                        .append('\n');
+            }
+        }
+        return sb.toString();
+    }
+
+    private static String balanceText(Object v, boolean unlimited) {
+        if (unlimited) {
+            return "不限额";
+        }
+        return v == null ? "" : String.valueOf(v);
+    }
+
+    private static String csvCell(String v) {
+        if (v == null) {
+            return "";
+        }
+        if (v.contains(",") || v.contains("\"") || v.contains("\n")) {
+            return '"' + v.replace("\"", "\"\"") + '"';
+        }
+        return v;
     }
 
     // ==================== 变动 ====================
