@@ -87,10 +87,8 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
     }
   }, [])
 
-  // 画布尺寸变化时重排（切回表单 tab 后容器由 hidden 恢复 / 窗口缩放）
-  useEffect(() => {
-    if (tab !== 'form') modelerRef.current?.view?.resize()
-  }, [tab])
+  // 窗口缩放时重排画布（画布始终保持真实布局尺寸，不以 display:none 隐藏，
+  // 避免零尺寸容器初始化/重算引发各浏览器 non-finite 类异常）
   useEffect(() => {
     const onResize = () => modelerRef.current?.view?.resize()
     window.addEventListener('resize', onResize)
@@ -412,9 +410,9 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
         </div>
       </div>
 
-      {/* 主体：左画布 +（表单 tab 时）全宽表单设计器 + 右属性面板 */}
+      {/* 主体：左画布（始终保留真实尺寸） + 右属性面板；表单设计器以覆盖层铺满画布区 */}
       <div className="flex min-h-0 flex-1">
-        <div className={`relative min-w-0 flex-1 bg-white dark:bg-slate-800 ${tab === 'form' ? 'hidden' : ''}`}>
+        <div className="relative min-w-0 flex-1 bg-white dark:bg-slate-800">
           <div ref={containerRef} className="h-full w-full" />
           {tab === 'flow' && flowSource === 'visual' && (
             <div className="absolute inset-0 z-20 bg-white dark:bg-slate-800">
@@ -452,14 +450,13 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
               )}
             </div>
           )}
+          {/* 表单设计器（form tab）：不透明覆盖层铺满画布区（画布保持布局，避免零尺寸初始化） */}
+          {tab === 'form' && (
+            <div className="absolute inset-0 z-20 overflow-hidden bg-slate-50 p-4 dark:bg-slate-800">
+              <TemplateFormConfig fields={fields} onChange={setFields} />
+            </div>
+          )}
         </div>
-
-        {/* 表单设计器（form tab）：展开到全宽区域，避免窄列内嵌套滚动 */}
-        {tab === 'form' && (
-          <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-50 p-4 dark:bg-slate-900/40">
-            <TemplateFormConfig fields={fields} onChange={setFields} />
-          </div>
-        )}
 
         {/* 右侧属性面板 */}
         <div className="flex w-80 shrink-0 flex-col border-l border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
