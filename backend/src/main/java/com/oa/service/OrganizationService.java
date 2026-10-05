@@ -99,14 +99,9 @@ public class OrganizationService {
         if (req.getOrgName() != null && !req.getOrgName().isBlank()) {
             o.setOrgName(req.getOrgName().trim());
         }
-        if (req.getOrgCode() != null && !req.getOrgCode().isBlank()) {
-            String code = req.getOrgCode().trim();
-            if (!code.equals(o.getOrgCode())
-                    && organizationRepository.findByOrgCode(code)
-                            .filter(x -> !x.getId().equals(id)).isPresent()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "部门代码已存在: " + code);
-            }
-            o.setOrgCode(code);
+        if (req.getOrgCode() != null && !req.getOrgCode().isBlank()
+                && !req.getOrgCode().trim().equals(o.getOrgCode())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "部门代码创建后不可修改（引用保护）");
         }
         if (req.getSortOrder() != null) {
             o.setSortOrder(req.getSortOrder());
@@ -121,6 +116,8 @@ public class OrganizationService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "部门树存在环：上级不能是自己的后代部门");
             }
             o.setParent(parent);
+        } else if (Boolean.TRUE.equals(req.getClearParent())) {
+            o.setParent(null);
         }
         return organizationRepository.save(o);
     }

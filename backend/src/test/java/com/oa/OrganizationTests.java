@@ -53,7 +53,8 @@ class OrganizationTests {
     private Organization createTmp(String orgName) {
         Organization o = new Organization();
         o.setOrgName(orgName);
-        o.setOrgCode("T2_" + orgName);
+        // code 每 JVM 唯一（VARCHAR(8)）：避免跨测试/重跑的唯一键碰撞；cleanup 按 T2_ 前缀统一清理
+        o.setOrgCode("T2_" + (System.nanoTime() % 9999));
         o.setOrgType("DEPT");
         o.setStatus(com.oa.enums.EnableStatus.ENABLED);
         return organizationRepository.save(o);
@@ -198,6 +199,40 @@ class OrganizationTests {
     }
 
     @org.junit.jupiter.api.AfterAll
+    @Test
+    @Order(7)
+    void g_update_code_change_rejected() {
+        loginAs("admin");
+        var o = createTmp("T2_改码");
+        OrganizationRequest req = new OrganizationRequest();
+        req.setOrgCode("CHANGED-CODE");
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> organizationController.update(o.getId(), req));
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode(), "code 创建后不可改（引用保护）");
+    }
+
+    @Test
+    @Order(8)
+    void h_promote_to_top_level_via_clear_parent() {
+        loginAs("admin");
+        var parent = createTmp("T2_上级");
+        var child = createTmp("T2_下级");
+        child.setParent(parent);
+        child = organizationRepository.save(child);
+
+        var before = findNode(organizationController.tree().getData(), child.getId());
+        assertEquals(parent.getId(), ((Number) before.get("parentId")).longValue());
+
+        OrganizationRequest req = new OrganizationRequest();
+        req.setClearParent(true);
+        var r = organizationController.update(child.getId(), req);
+        assertEquals(200, r.getCode());
+        assertNull(r.getData().get("parentId"), "清除后应为顶级（parentId null）");
+        var after = findNode(organizationController.tree().getData(), child.getId());
+        assertNull(after.get("parentId"), "树中应为顶级节点");
+    }
+
+    @AfterEach
     void cleanup() {
         cleanupTmp();
     }

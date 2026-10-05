@@ -17,5 +17,8 @@ public class OrganizationRequest {
 
     private Long parentId;
 
+    /** 编辑时清除上级（升为顶级）——parentId null 语义为"不动"，需显式标记 */
+    private Boolean clearParent;
+
     private Integer sortOrder;
 }

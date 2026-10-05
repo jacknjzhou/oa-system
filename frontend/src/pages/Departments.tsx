@@ -146,9 +146,10 @@ export default function Departments() {
     try {
       const body = {
         orgName: form.orgName.trim(),
-        orgCode: form.orgCode.trim() || null,
+        orgCode: editing === 'new' ? (form.orgCode.trim() || null) : null, // code 创建后不可改
         parentId: form.parentId,
         sortOrder: form.sortOrder,
+        clearParent: editing !== 'new' && form.parentId === null,
       }
       if (editing === 'new') await orgApi.create(body)
       else if (editing) await orgApi.update(editing.id, body)

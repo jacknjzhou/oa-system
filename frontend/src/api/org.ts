@@ -16,6 +16,8 @@ export type OrgForm = {
   orgName: string
   orgCode?: string | null
   parentId?: number | null
+  /** 编辑时清除上级（升为顶级） */
+  clearParent?: boolean
   sortOrder?: number | null
 }
 
