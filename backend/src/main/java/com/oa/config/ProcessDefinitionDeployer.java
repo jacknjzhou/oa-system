@@ -20,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 幂等：已存在同 key 定义则跳过，避免重复部署膨胀。
  */
 @Slf4j
-@Order(200)
+@Order(400)
 @Component
 @RequiredArgsConstructor
 public class ProcessDefinitionDeployer implements ApplicationRunner {

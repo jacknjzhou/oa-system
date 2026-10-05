@@ -388,6 +388,7 @@ public class LeaveService {
             txn.setReason(reason);
             txn.setRefInstanceNo(ref);
             txn.setTxnType("CONSUME");
+            txn.setOperatorId(userId);
             txn.setInstanceId(instanceId);
             leaveTransactionRepository.save(txn);
             return toBalanceMap(balance, type);
@@ -468,6 +469,7 @@ public class LeaveService {
         txn.setReason("冻结");
         txn.setRefInstanceNo(ref);
         txn.setTxnType("FREEZE");
+        txn.setOperatorId(userId);
         txn.setInstanceId(instanceId);
         leaveTransactionRepository.save(txn);
     }
@@ -497,6 +499,7 @@ public class LeaveService {
         txn.setReason("释放");
         txn.setRefInstanceNo(ref);
         txn.setTxnType("RELEASE");
+        txn.setOperatorId(userId);
         txn.setInstanceId(instanceId);
         leaveTransactionRepository.save(txn);
     }

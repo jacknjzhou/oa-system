@@ -2,10 +2,12 @@ package com.oa.config;
 
 import com.oa.bpmn.BpmnDiHealer;
 import com.oa.entity.ApprovalType;
+import com.oa.entity.LeaveType;
 import com.oa.entity.ProcessDefinition;
 import com.oa.entity.User;
 import com.oa.enums.ProcessDefinitionStatus;
 import com.oa.repository.ApprovalTypeRepository;
+import com.oa.repository.LeaveTypeRepository;
 import com.oa.repository.ProcessDefinitionRepository;
 import com.oa.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -31,12 +33,13 @@ import java.util.List;
 @Component
 @RequiredArgsConstructor
 // 早于 ProcessDefinitionDeployer(200)：新建/修复的模板在同一次启动即部署到 Flowable 引擎
-@Order(150)
+@Order(320)
 public class ProcessTemplateSeeder implements ApplicationRunner {
 
     private final ProcessDefinitionRepository definitionRepository;
     private final ApprovalTypeRepository approvalTypeRepository;
     private final UserRepository userRepository;
+    private final LeaveTypeRepository leaveTypeRepository;
 
     @Override
     @Transactional
@@ -508,7 +511,28 @@ public class ProcessTemplateSeeder implements ApplicationRunner {
     }
 
     private void seedLeaveTemplate() throws Exception {
-        if (!definitionRepository.findByDefKey("leave").isEmpty()) {
+        // 请假类型选项与 leave_type 表同源（规格 5.2 权威表序：权重降序）
+        String optionsJson = leaveTypeRepository.findByEnabledTrueOrderByWeightDescIdAsc().stream()
+                .map(LeaveType::getName)
+                .map(n -> "\"" + n + "\"")
+                .collect(java.util.stream.Collectors.joining(","));
+        String formConfig = "{\"fields\":["
+                + "{\"key\":\"leaveType\",\"label\":\"请假类型\",\"type\":\"radio\",\"required\":true,\"options\":[" + optionsJson + "]},"
+                + "{\"key\":\"leaveRange\",\"label\":\"请假时段\",\"type\":\"dateRange\",\"required\":true},"
+                + "{\"key\":\"days\",\"label\":\"请假时长\",\"type\":\"number\",\"required\":true,\"min\":0,\"max\":60,\"unit\":\"天\"},"
+                + "{\"key\":\"reason\",\"label\":\"请假事由\",\"type\":\"textarea\",\"required\":true,\"placeholder\":\"请说明请假原因\"}"
+                + "]}";
+
+        var existing = definitionRepository.findByDefKey("leave");
+        if (!existing.isEmpty()) {
+            // 存量模板：formConfig 与最新选项不一致则就地更新（保留用户自定义 BPMN）
+            ProcessDefinition def = existing.get(0);
+            if (!formConfig.equals(def.getFormConfig())) {
+                def.setFormConfig(formConfig);
+                definitionRepository.save(def);
+                log.info("更新请假模板表单选项（假期类型联动，{} 项）",
+                        leaveTypeRepository.findByEnabledTrueOrderByWeightDescIdAsc().size());
+            }
             return;
         }
         User admin = userRepository.findByUsername("admin").orElse(null);
@@ -518,13 +542,7 @@ public class ProcessTemplateSeeder implements ApplicationRunner {
         def.setVersion(1);
         def.setCategory("leave");
         def.setDescription("请假申请（年假/病假/事假等），部门经理审批");
-        def.setFormConfig("""
-                {"fields":[
-                  {"key":"leaveType","label":"请假类型","type":"radio","required":true,"options":["年假","病假","事假","婚假","陪产假","特殊假"]},
-                  {"key":"leaveRange","label":"请假时段","type":"dateRange","required":true},
-                  {"key":"days","label":"请假天数","type":"number","required":true,"min":0,"max":60,"unit":"天"},
-                  {"key":"reason","label":"请假事由","type":"textarea","required":true,"placeholder":"请说明请假原因"}
-                ]}""");
+        def.setFormConfig(formConfig);
         def.setBpmnXml(simpleBpmnWithDi("leave", "请假审批", "经理审批"));
         def.setFlowSpec("{\"nodes\":[{\"id\":\"managerApprove\",\"name\":\"经理审批\",\"approverType\":\"role\",\"roles\":[\"MANAGER\"],\"signMode\":\"single\"}]}");
         def.setStatus(ProcessDefinitionStatus.PUBLISHED);
