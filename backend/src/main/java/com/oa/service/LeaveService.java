@@ -9,6 +9,7 @@ import com.oa.repository.LeaveBalanceRepository;
 import com.oa.repository.LeaveTransactionRepository;
 import com.oa.repository.LeaveTypeRepository;
 import com.oa.repository.UserRepository;
+import com.oa.enums.UserStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -249,7 +250,7 @@ public class LeaveService {
         }
         balance.setQuota(nvl(balance.getQuota()).add(amount));
         leaveBalanceRepository.save(balance);
-        recordTransaction(userId, type, amount, reason, ref, "GRANT", operatorId, null);
+        recordTransaction(userId, type, amount, reason, ref, "GRANT", operatorId, null, null);
         return toBalanceMap(balance, type);
     }
 
@@ -295,7 +296,7 @@ public class LeaveService {
         balance.setFrozen(nvl(balance.getFrozen()).subtract(days).max(BigDecimal.ZERO));
         balance.setUsed(nvl(balance.getUsed()).add(days));
         leaveBalanceRepository.save(balance);
-        recordTransaction(userId, type, days.negate(), reason, ref, "CONSUME", userId, instanceId);
+        recordTransaction(userId, type, days.negate(), reason, ref, "CONSUME", userId, instanceId, null);
         return toBalanceMap(balance, type);
     }
 
@@ -319,13 +320,13 @@ public class LeaveService {
             if (!reversed) {
                 balance.setUsed(nvl(balance.getUsed()).subtract(days).max(BigDecimal.ZERO));
                 leaveBalanceRepository.save(balance);
-                recordTransaction(userId, type, days, reason, ref, "REVERSE", userId, instanceId);
+                recordTransaction(userId, type, days, reason, ref, "REVERSE", userId, instanceId, null);
             }
             return toBalanceMap(balance, type);
         }
         balance.setUsed(nvl(balance.getUsed()).subtract(days).max(BigDecimal.ZERO));
         leaveBalanceRepository.save(balance);
-        recordTransaction(userId, type, days, reason, ref, "REVERSE", userId, instanceId);
+        recordTransaction(userId, type, days, reason, ref, "REVERSE", userId, instanceId, null);
         return toBalanceMap(balance, type);
     }
 
@@ -458,7 +459,8 @@ public class LeaveService {
     }
 
     private void recordTransaction(Long userId, LeaveType type, BigDecimal delta, String reason,
-                                   String ref, String txnType, Long operatorId, Long instanceId) {
+                                   String ref, String txnType, Long operatorId, Long instanceId,
+                                   String remark) {
         LeaveTransaction txn = new LeaveTransaction();
         txn.setUserId(userId);
         txn.setLeaveTypeId(type.getId());
@@ -468,7 +470,78 @@ public class LeaveService {
         txn.setTxnType(txnType);
         txn.setOperatorId(operatorId);
         txn.setInstanceId(instanceId);
+        txn.setRemark(remark);
         leaveTransactionRepository.save(txn);
+    }
+
+    // ==================== HD-07：授予 / 调整（管理操作，ADMIN） ====================
+
+    /**
+     * 额度设定（SET_QUOTA）：quota = newQuota，流水 delta = 新−旧，txnType=QUOTA。
+     * 不变式：newQuota ≥ used+frozen，否则拒绝（避免负余额）。
+     */
+    @Transactional
+    public Map<String, Object> setQuota(Long userId, String typeCode, BigDecimal newQuota,
+                                        String remark, Long operatorId) {
+        if (newQuota == null || newQuota.compareTo(BigDecimal.ZERO) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "额度必须 >= 0");
+        }
+        User target = requireActiveUser(userId);
+        LeaveType type = requireType(typeCode);
+        LeaveBalance b = ensureBalance(target.getId(), type);
+        BigDecimal old = nvl(b.getQuota());
+        BigDecimal inUse = nvl(b.getUsed()).add(nvl(b.getFrozen()));
+        if (newQuota.compareTo(inUse) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "额度不能低于已用+冻结（" + inUse + "）");
+        }
+        if (newQuota.compareTo(old) == 0) {
+            return toBalanceMap(b, type);
+        }
+        b.setQuota(newQuota);
+        leaveBalanceRepository.save(b);
+        recordTransaction(target.getId(), type, newQuota.subtract(old), "额度设定",
+                null, "QUOTA", operatorId, null, remark);
+        return toBalanceMap(b, type);
+    }
+
+    /**
+     * 剩余时长修正（SET_REMAINING）：不限额类型拒绝（无剩余概念）；
+     * 限额类型 quota = used+frozen+newRemaining（修正总额度使剩余达标），流水 txnType=ADJUST。
+     */
+    @Transactional
+    public Map<String, Object> setRemaining(Long userId, String typeCode, BigDecimal newRemaining,
+                                            String remark, Long operatorId) {
+        if (newRemaining == null || newRemaining.compareTo(BigDecimal.ZERO) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "剩余时长必须 >= 0");
+        }
+        User target = requireActiveUser(userId);
+        LeaveType type = requireType(typeCode);
+        if (!type.isLimited()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不限额类型无剩余时长概念");
+        }
+        LeaveBalance b = ensureBalance(target.getId(), type);
+        BigDecimal old = nvl(b.getQuota());
+        BigDecimal newQuota = nvl(b.getUsed()).add(nvl(b.getFrozen())).add(newRemaining);
+        if (newQuota.compareTo(old) == 0) {
+            return toBalanceMap(b, type);
+        }
+        b.setQuota(newQuota);
+        leaveBalanceRepository.save(b);
+        recordTransaction(target.getId(), type, newQuota.subtract(old), "剩余时长调整",
+                null, "ADJUST", operatorId, null, remark);
+        return toBalanceMap(b, type);
+    }
+
+    /** 管理操作目标必须为在职员工（需求 5.4.2）。 */
+    private User requireActiveUser(Long userId) {
+        User u = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "目标用户不存在"));
+        if (u.getStatus() != UserStatus.ACTIVE) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "目标用户非在职（当前状态: " + u.getStatus() + "）");
+        }
+        return u;
     }
 
     private boolean matchesKeyword(User u, String kw) {

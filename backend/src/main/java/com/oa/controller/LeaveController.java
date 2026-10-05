@@ -1,6 +1,7 @@
 package com.oa.controller;
 
 import com.oa.dto.ApiResponse;
+import com.oa.dto.LeaveAdminGrantRequest;
 import com.oa.dto.LeaveTypeRequest;
 import com.oa.entity.User;
 import com.oa.service.AuthService;
@@ -116,5 +117,20 @@ public class LeaveController {
         requireLeaveManage();
         leaveService.deleteType(id);
         return ApiResponse.success();
+    }
+
+    /** 授予/调整余额（HD-07）：action 分发 SET_QUOTA / SET_REMAINING；操作人=当前登录用户。 */
+    @PostMapping("/admin/grant")
+    @Transactional
+    public ApiResponse<Map<String, Object>> adminGrant(@Valid @RequestBody LeaveAdminGrantRequest req) {
+        requireLeaveManage();
+        if (!"SET_QUOTA".equals(req.action()) && !"SET_REMAINING".equals(req.action())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "非法操作类型: " + req.action());
+        }
+        Long operatorId = authService.getCurrentUser().getId();
+        Map<String, Object> b = "SET_QUOTA".equals(req.action())
+                ? leaveService.setQuota(req.userId(), req.typeCode(), req.amount(), req.remark(), operatorId)
+                : leaveService.setRemaining(req.userId(), req.typeCode(), req.amount(), req.remark(), operatorId);
+        return ApiResponse.success(b);
     }
 }
