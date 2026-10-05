@@ -181,6 +181,10 @@ export interface InstanceDTO {
   title: string
   initiatorId: string
   initiatorName: string
+  /** 发起人部门（6.4.3，可空） */
+  initiatorOrgName?: string | null
+  /** 发起人岗位（6.4.3，可空） */
+  initiatorPosition?: string | null
   businessType: string
   businessData: string
   currentNode: string

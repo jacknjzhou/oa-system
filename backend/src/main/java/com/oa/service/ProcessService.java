@@ -556,6 +556,10 @@ public class ProcessService {
         dto.setInitiatorId(instance.getInitiator().getId());
         dto.setInitiatorName(instance.getInitiator().getRealName() != null
                 ? instance.getInitiator().getRealName() : instance.getInitiator().getUsername());
+        // 6.4.3：发起人部门/岗位（null 安全；与员工档案同源 sys_user，调岗后新实例自动一致）
+        dto.setInitiatorOrgName(instance.getInitiator().getOrg() == null
+                ? null : instance.getInitiator().getOrg().getOrgName());
+        dto.setInitiatorPosition(instance.getInitiator().getPosition());
         dto.setBusinessType(instance.getBusinessType());
         dto.setBusinessData(instance.getBusinessData());
         dto.setCurrentNode(instance.getCurrentNode());

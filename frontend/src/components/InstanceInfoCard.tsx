@@ -35,7 +35,15 @@ export default function InstanceInfoCard({ instance, formFields, perms }: Instan
       <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 border-t border-slate-100 pt-4 text-sm dark:border-slate-700 sm:grid-cols-2 lg:grid-cols-3">
         <div>
           <dt className="text-slate-400 dark:text-slate-500">发起人</dt>
-          <dd className="mt-0.5 font-medium text-slate-800 dark:text-slate-200">{instance.initiatorName}</dd>
+          <dd className="mt-0.5 font-medium text-slate-800 dark:text-slate-200">
+            {instance.initiatorName}
+            {instance.initiatorOrgName && (
+              <span className="ml-2 text-xs font-normal text-slate-400">{instance.initiatorOrgName}</span>
+            )}
+            {instance.initiatorPosition && (
+              <span className="ml-2 text-xs font-normal text-slate-400">{instance.initiatorPosition}</span>
+            )}
+          </dd>
         </div>
         <div>
           <dt className="text-slate-400 dark:text-slate-500">提交时间</dt>

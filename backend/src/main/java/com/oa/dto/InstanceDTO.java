@@ -30,6 +30,12 @@ public class InstanceDTO {
 
     private String initiatorName;
 
+    /** 发起人部门名（6.4.3：来自 sys_user.org，null 安全） */
+    private String initiatorOrgName;
+
+    /** 发起人岗位（6.4.3） */
+    private String initiatorPosition;
+
     private String businessType;
 
     /** 业务表单数据（JSON 字符串） */
