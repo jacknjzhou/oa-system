@@ -4,9 +4,11 @@ import com.oa.dto.ApiResponse;
 import com.oa.entity.User;
 import com.oa.service.AuthService;
 import com.oa.service.LeaveService;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
+
+import java.math.BigDecimal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,7 +33,7 @@ public class LeaveController {
 
     public record GrantRequest(
             @NotBlank String typeCode,
-            @Min(1) @Max(365) int amount,
+            @Positive @Digits(integer = 8, fraction = 2) BigDecimal amount,
             String reason
     ) {}
 
@@ -52,10 +54,11 @@ public class LeaveController {
         return ApiResponse.success(leaveService.ledger(current.getId(), typeCode));
     }
 
-    /** 额度授予（管理操作；演示环境对登录用户开放，生产应收敛到 ADMIN）。 */
+    /** 额度授予（管理操作；演示环境对登录用户开放，生产应收敛到 leave:manage）。 */
     @PostMapping("/grant")
     public ApiResponse<Map<String, Object>> grant(@RequestBody GrantRequest req) {
         User current = authService.getCurrentUser();
-        return ApiResponse.success(leaveService.grant(current.getId(), req.typeCode(), req.amount(), req.reason()));
+        return ApiResponse.success(leaveService.grant(current.getId(), req.typeCode(),
+                req.amount(), req.reason(), null, current.getId()));
     }
 }

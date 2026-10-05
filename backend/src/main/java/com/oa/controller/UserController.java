@@ -63,6 +63,8 @@ public class UserController {
             m.put("realName", u.getRealName());
             m.put("position", u.getPosition());
             m.put("email", u.getEmail());
+            m.put("orgId", u.getOrg() == null ? null : u.getOrg().getId());
+            m.put("orgName", u.getOrg() == null ? null : u.getOrg().getOrgName());
             m.put("supervisorId", u.getSupervisorId());
             m.put("roles", u.getRoleCodes());
             m.put("jobLevelId", u.getJobLevelId());

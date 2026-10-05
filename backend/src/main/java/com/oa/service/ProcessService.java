@@ -765,12 +765,13 @@ public class ProcessService {
             return;
         }
         String code = leave[0];
-        int days = Integer.parseInt(leave[1]);
+        java.math.BigDecimal days = new java.math.BigDecimal(leave[1]);
+        Long uid = instance.getInitiator().getId();
         switch (instance.getStatus()) {
-            case RUNNING -> leaveService.freeze(instance.getInitiator().getId(), code, days, instance.getInstanceNo());
-            case COMPLETED -> leaveService.consume(instance.getInitiator().getId(), code, days,
-                    instance.getInstanceNo(), "请假审批通过");
-            case REJECTED, CANCELLED -> leaveService.release(instance.getInitiator().getId(), code, days, instance.getInstanceNo());
+            case RUNNING -> leaveService.freeze(uid, code, days, instance.getInstanceNo(), instance.getId());
+            case COMPLETED -> leaveService.consume(uid, code, days,
+                    instance.getInstanceNo(), "请假审批通过", instance.getId());
+            case REJECTED, CANCELLED -> leaveService.release(uid, code, days, instance.getInstanceNo(), instance.getId());
             default -> { /* DRAFT 等不处理 */ }
         }
     }
@@ -792,11 +793,11 @@ public class ProcessService {
                 log.warn("请假实例 {} 的假期类型无法解析: {}", instance.getInstanceNo(), leaveType);
                 return null;
             }
-            int d = new java.math.BigDecimal(String.valueOf(days)).intValue();
-            if (d <= 0) {
+            java.math.BigDecimal d = new java.math.BigDecimal(String.valueOf(days));
+            if (d.compareTo(java.math.BigDecimal.ZERO) <= 0) {
                 return null;
             }
-            return new String[]{code, String.valueOf(d)};
+            return new String[]{code, d.stripTrailingZeros().toPlainString()};
         } catch (Exception e) {
             log.warn("请假实例 {} 业务数据解析失败: {}", instance.getInstanceNo(), e.getMessage());
             return null;

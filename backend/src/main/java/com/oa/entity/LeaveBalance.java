@@ -8,7 +8,12 @@ import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.Setter;
 
-/** 假期余额（AT-03 三账本之一：额度账）。balance = quota - used - frozen。 */
+import java.math.BigDecimal;
+
+/**
+ * 假期余额（AT-03 三账本之一：额度账）。
+ * available = quota - used - frozen（BigDecimal：支持 0.5 半天 / 2.5 小时）。
+ */
 @Getter
 @Setter
 @Entity
@@ -23,11 +28,20 @@ public class LeaveBalance extends BaseEntity {
     @Column(name = "leave_type_id", nullable = false)
     private Long leaveTypeId;
 
-    private Integer quota = 0;
-    private Integer used = 0;
-    private Integer frozen = 0;
+    @Column(nullable = false)
+    private BigDecimal quota = BigDecimal.ZERO;
 
-    public int available() {
-        return (quota == null ? 0 : quota) - (used == null ? 0 : used) - (frozen == null ? 0 : frozen);
+    @Column(nullable = false)
+    private BigDecimal used = BigDecimal.ZERO;
+
+    @Column(nullable = false)
+    private BigDecimal frozen = BigDecimal.ZERO;
+
+    public BigDecimal available() {
+        return nvl(quota).subtract(nvl(used)).subtract(nvl(frozen));
+    }
+
+    private static BigDecimal nvl(BigDecimal v) {
+        return v == null ? BigDecimal.ZERO : v;
     }
 }
