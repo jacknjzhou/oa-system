@@ -64,6 +64,7 @@ public class PermissionSeeder implements ApplicationRunner {
             new String[]{"procurement:manage", "采购管理", "采购"},
             // 人事
             new String[]{"hr:user", "员工管理", "人事"},
+            new String[]{"hr:dept", "部门管理", "人事"},
             new String[]{"hr:level", "职级职称管理", "人事"},
             // 系统
             new String[]{"system:settings", "系统设置", "系统"},
