@@ -4,13 +4,20 @@
 
 **目标：** 按 `docs/zhidieyun_oa_requirements.md` 第 5 节补齐假期模块 8 个功能点：假期管理（部门树+员工余额）、余额详情、余额日志、假期类型 CRUD、授予/调整余额、数据导出，并为全部余额体系引入**时长单位（天/小时/半天）**。
 
-**架构：** 沿用现有「三账本」（leave_type 额度账 / leave_balance 余额账 / leave_transaction 发生账）+ 审批联动（freeze/consume/release）。本计划：① 数值列 INT→DECIMAL(10,2)、类型加 `unit` 字段，单位隔离不做跨单位换算（需求 5.5 规则 5）；② 流水扩展 operator_id/txn_type/remark 满足 HD-03 日志五要素；③ 新增 `/api/leave/admin/**` 管理端点（服务端校验 ADMIN 角色）；④ 前端新增「假期管理」「假期类型」两个导航页，「我的假期」页单位感知化；⑤ 预置 9 类假期（需求 5.3.2 实测值）并让请假模板表单类型选项与类型表同源联动。
+**架构：** 沿用现有「三账本」（leave_type 额度账 / leave_balance 余额账 / leave_transaction 发生账）+ 审批联动（freeze/consume/release）。本计划：① 数值列 INT→DECIMAL(10,2)、类型加 `unit` 字段，单位隔离不做跨单位换算（需求 5.5 规则 5）；② 流水扩展 operator_id/txn_type/remark 满足 HD-03 日志五要素；③ 新增 `/api/leave/admin/**` 管理端点（服务端校验 `leave:manage` **权限码**，复用 PermissionSeeder 已种权限，403 拒绝）；④ 前端「考勤/假期」两导航项合并为一个「考勤&假期」五 Tab 导航（我的考勤/全部考勤/考勤设置/假期管理/假期类型），「我的假期」单位感知化并按权限切换视图；⑤ 预置 9 类假期（需求 5.3.2 实测值）并让请假模板表单类型选项与类型表同源联动。
 
 **技术栈：** Java 21 / Spring Boot 3.2.10 / Spring Data JPA / Flyway（common + h2 + mysql 三目录）/ React 18 + Vite + Tailwind / Flowable 7.0.1（审批联动回归）
 
 **规格：** `docs/zhidieyun_oa_requirements.md` 第 5 节（5.1~5.6，HD-01~HD-08 与验收清单 10 条）
 
-**范围裁决（Ruling）：** 验收 5.6-⑤ 要求「考勤与假期合并 1 个一级导航共 5 Tab（我的考勤/全部考勤/考勤设置/假期管理/假期类型）」。本期**不实施考勤页重构**，落地为 4 个一级导航项：考勤打卡（现状不变）/ 我的假期 / 假期管理 / 假期类型；「全部考勤、考勤设置、5-Tab 合并」列为后续考勤模块任务。理由：本计划范围是假期模块 8 个功能点，考勤页合并属考勤模块改造，两者可独立演进。
+**范围裁决（Ruling，吸收了已归档 holiday 计划的 4 条更优决策）：**
+1. **五 Tab 合并导航**（规格 5.6-⑤/4.3.0）：AppShell 的「考勤打卡」「我的假期」两导航项合并为一个「考勤&假期」（`/attendance`）；五 Tab = 我的考勤（现有 Attendance.tsx 不动）/ 全部考勤（**简化只读版**：月份+人员筛选，无状态/IP 列）/ 考勤设置（**占位页** EmptyState「规划中」）/ 假期管理（`/leave`，按 `leave:manage` 权限切换：有权限→LeaveManagement，无→MyLeave）/ 假期类型（`/leave/types`，仅 `leave:manage` 可见）。CK-02/CK-03 完整能力（状态分类/IP/设置持久化）属考勤模块后续计划。
+2. **权限校验用 `leave:manage` 权限码**（而非 ADMIN 角色）：服务端取当前用户权限码（PermissionService 现成能力），前端 ProtectedRoute/导航/Tab 同款判定。
+3. **流水直接存 `instance_id` 列**（审批联动时写入），日志链接直接用，免单号反查。
+4. **不移动演示用户的部门归属**（4 人留在技术部）：V22 只播种 4 个新部门（0 人），部门树显示全部 5 部门及真实人数。
+5. **流程条件面板复选组**（规格 3.4.5/5.5 规则②后半）属审批设置模块 AS-05，不在本计划；本计划仅覆盖表单「请假类型」下拉同源联动。
+
+**注：** 竞争方案 `2026-10-05-holiday-module-gap-implementation.md` 已移入 `plans/archive/`（其 V22 与本计划 V22 版本冲突，不得执行）。
 
 ## 全局约束
 
@@ -85,7 +92,7 @@ public boolean limited()           // return !"none".equals(quotaType);
 
 // LeaveBalance / LeaveTransaction
 BigDecimal quota;  BigDecimal used;  BigDecimal frozen;  // Integer → BigDecimal
-BigDecimal delta;  Long operatorId;  String txnType;  String remark;  // txnType 枚举值：
+BigDecimal delta;  Long operatorId;  String txnType;  String remark;  Long instanceId;  // txnType 枚举值：
 // "GRANT"(授予) "ADJUST"(调整) "QUOTA"(额度设定) "CONSUME"(请假扣减) "REVERSE"(冲销) "FREEZE"(冻结) "RELEASE"(释放)
 
 // LeaveService 关键签名（T2/T3/T5 使用）
@@ -107,6 +114,7 @@ ALTER TABLE leave_type ADD COLUMN unit VARCHAR(8) NOT NULL DEFAULT 'day';
 ALTER TABLE leave_transaction ADD COLUMN operator_id BIGINT;
 ALTER TABLE leave_transaction ADD COLUMN txn_type VARCHAR(16) NOT NULL DEFAULT 'GRANT';
 ALTER TABLE leave_transaction ADD COLUMN remark VARCHAR(255);
+ALTER TABLE leave_transaction ADD COLUMN instance_id BIGINT;   -- 审批实例直存（日志关联链接）
 
 -- 预置 9 类（需求 5.3.2 实测值；limited 映射：是→fixed，否→none；幂等）
 INSERT INTO leave_type (code, name, category, quota_type, annual_quota, weight, enabled, unit, created_at, updated_at)
@@ -123,9 +131,9 @@ UPDATE leave_type SET quota_type='none',  weight=95, unit='day'     WHERE code='
 UPDATE leave_type SET quota_type='none',  weight=93, unit='day'     WHERE code='PATERNITY';
 UPDATE leave_type SET weight=90, unit='day' WHERE code='SPECIAL';   -- 保留既有「特殊假」
 
--- 部门播种（需求 5.3.1 截图 5 部门；幂等）
--- MARKET 市场部 / OPERATIONS 运营部 / ADMIN_DEPT 行政部 / HR 人事部（org_type='DEPT'，parent_id 空，path 各自独立）
--- 演示用户归属（幂等 SET）：manager→TECH，employee→MARKET，admin/finance→HR
+-- 部门播种（需求 5.3.1 截图 5 部门；幂等，不移动用户归属——裁决 4）
+-- MARKET 市场部 / OPERATIONS 运营部 / ADMIN_DEPT 行政部 / HR 人事部（org_type='DEPT'，parent_id 空，path '/'）
+-- 4 个演示用户全部留在既有 TECH（部门树预期：TECH(4)、其余 4 部门(0)）
 
 -- 流水索引（按员工+时间查日志）已存在 idx_leave_txn_user_time，无需新增
 ```
@@ -159,7 +167,7 @@ List<LeaveTransaction> findLog(@Param("userId") Long userId, @Param("typeId") Lo
 
 - [ ] **步骤 4：LeaveService decimal 化（行为不变回归）**
 
-`grant/consume/reverse/freeze/release` 参数与内部运算全部 BigDecimal（`nvl(BigDecimal)`）；所有 `recordTransaction` 调用补 `operatorId`（来自调用方：审批联动传发起人 id，grant 传操作者 id）与 `txnType`（freeze→"FREEZE"，release→"RELEASE"，consume→"CONSUME"，reverse→"REVERSE"，grant→"GRANT"）。`toBalanceMap` 输出加 `unit/limited/weight`。新增私有 `toTxnMap(LeaveTransaction)`（**T4 的 adminLogs 复用**）输出键：`id/typeCode/typeName/unit/delta/txnType/typeLabel/operatorId/operatorName/acceptName/reason/remark/refInstanceNo/refInstanceId/createdAt`——`typeLabel` 映射表：`{GRANT:授予, ADJUST:调整, QUOTA:额度设定, CONSUME:请假扣减, REVERSE:冲销, FREEZE:冻结, RELEASE:释放}`；`acceptName`=流水所属员工 realName；`refInstanceId`=按 refInstanceNo 查 `processInstanceRepository`（查不到 null）；operatorName 按 operatorId 查 user（null 时回退 acceptName）。`ledger()` 与 `ledger(type)` 改走 `toTxnMap`。`ProcessService.parseLeaveRequest` 的 `days` 改保留原始文本（`String.valueOf`），调用方 `new BigDecimal`（去掉 intValue 截断）。`ProcessTemplateSeeder.seedLeaveTemplate`：formConfig 中请假类型 `options` 改为从 `leaveTypeRepository.findByEnabledTrueOrderByWeightDescIdAsc()` 动态映射显示名，`days` 字段 label 改「请假时长」。LeaveBalanceSeeder：TYPES 常量每项加第 6 位 unit（`{code,name,quotaType,annualQuota,weight,unit}`），9 类 + SPECIAL 与 V22 一致，保留演示授额（年假 10 / 事假 5；事假已 none 化后 grant 仅记流水，允许）。UserController.listUsers Map + `orgId`/`orgName`（`u.getOrg()` 判空）。
+`grant/consume/reverse/freeze/release` 参数与内部运算全部 BigDecimal（`nvl(BigDecimal)`）；所有 `recordTransaction` 调用补 `operatorId`（来自调用方：审批联动传发起人 id，grant 传操作者 id）与 `txnType`（freeze→"FREEZE"，release→"RELEASE"，consume→"CONSUME"，reverse→"REVERSE"，grant→"GRANT"）。`toBalanceMap` 输出加 `unit/limited/weight`。新增私有 `toTxnMap(LeaveTransaction)`（**T4 的 adminLogs 复用**）输出键：`id/typeCode/typeName/unit/delta/txnType/typeLabel/operatorId/operatorName/acceptName/reason/remark/refInstanceNo/instanceId/createdAt`——`typeLabel` 映射表：`{GRANT:授予, ADJUST:调整, QUOTA:额度设定, CONSUME:请假扣减, REVERSE:冲销, FREEZE:冻结, RELEASE:释放}`；`acceptName`=流水所属员工 realName；`instanceId` 直存（审批联动流水写入实例 id，其余 null）；operatorName 按 operatorId 查 user（null 时回退 acceptName）。`ledger()` 与 `ledger(type)` 改走 `toTxnMap`。`recordTransaction` 新增 `instanceId` 参数（审批联动传实例 id，管理操作传 null）。`ProcessService.parseLeaveRequest` 的 `days` 改保留原始文本（`String.valueOf`），调用方 `new BigDecimal`（去掉 intValue 截断）。`ProcessTemplateSeeder.seedLeaveTemplate`：formConfig 中请假类型 `options` 改为从 `leaveTypeRepository.findByEnabledTrueOrderByWeightDescIdAsc()` 动态映射显示名，`days` 字段 label 改「请假时长」。LeaveBalanceSeeder：TYPES 常量每项加第 6 位 unit（`{code,name,quotaType,annualQuota,weight,unit}`），9 类 + SPECIAL 与 V22 一致；**演示授额改为仅 ANNUAL**（manager 5 / employee 10；PERSONAL 已 none 化，取消 SEED-PERSONAL 授予——裁决：不限额类型不做演示授额）。UserController.listUsers Map + `orgId`/`orgName`（`u.getOrg()` 判空）。
 
 - [ ] **步骤 5：写失败测试（decimal 与 9 类型）**
 
@@ -232,14 +240,15 @@ DELETE /api/leave/types/{id}
 // 读端点沿用任务 1 的 GET /api/leave/types
 ```
 - `limited` → `quotaType` 映射：`limited ? "fixed" : "none"`（编辑时保留原 accrual 语义：仅当 limited 翻转时改写，否则不动 quotaType——避免误伤）。
-- 名称唯一校验（重名 400）。
+- 名称唯一校验（重名 400）；`code` 缺省时自动取名称。
+- **权限**：三个端点先 `requireLeaveManage()`（当前用户权限码不含 `leave:manage` → 403；admin 属 SYSTEM_ADMIN 组=全部权限 → 通过）。`requireLeaveManage()` 私有 helper 注入 `PermissionService`，复用其权限码集合方法。
 
 - [ ] **步骤 1：写失败测试** `LeaveTypeCrudTests`（loginAs("admin")）：
 ```java
 @Test void create_edit_and_list() {
-    var created = leaveService.createType(new LeaveTypeRequest("测试假", true, "hour", 50), adminId());
+    var created = leaveService.createType(new LeaveTypeRequest(null, "测试假", true, "hour", 50), adminId());
     assertThat((String) created.get("code")).isNotBlank();
-    var updated = leaveService.updateType((Long) created.get("id"), new LeaveTypeRequest("测试假改", false, "day", 60));
+    var updated = leaveService.updateType((Long) created.get("id"), new LeaveTypeRequest(null, "测试假改", false, "day", 60));
     assertThat((boolean) updated.get("limited")).isFalse();
     assertThat(leaveService.listTypes().stream().anyMatch(t -> t.getName().equals("测试假改"))).isTrue();
 }
@@ -257,9 +266,9 @@ DELETE /api/leave/types/{id}
     assertThat(leaveBalanceRepository.count()).isEqualTo(beforeCount);  // 数据未动（diff）
 }
 @Test void delete_allowed_when_empty() {
-    var t = leaveService.createType(new LeaveTypeRequest("临时假", false, "day", 1), adminId());
+    var t = leaveService.createType(new LeaveTypeRequest(null, "临时假", false, "day", 1), adminId());
     leaveService.deleteType((Long) t.get("id"));
-    assertThat(leaveTypeRepository.findByCode(...)).isEmpty();
+    assertThat(leaveTypeRepository.findByCode((String) t.get("code"))).isEmpty();
 }
 ```
 
@@ -325,12 +334,15 @@ Map<String,Object> setRemaining(Long userId, String typeCode, BigDecimal newRema
         .hasMessageContaining("非在职");
 }
 @Test void admin_role_required_at_controller() {
-    // employee 调端点 → 403（MockMvc 或直接断言 service 前置——本项目无 MockMvc 基建，
-    // 用 @Autowired LeaveController + loginAs("employee") 调 grant 断言 403）
+    // employee（无 leave:manage 权限码）调 controller 端点 → 403（getCurrentUser 走 SecurityContext，loginAs 已设）
+}
+@Test void admin_passes_permission_check() {   // admin 属 SYSTEM_ADMIN 组=全部权限
+    loginAs("admin");
+    leaveController.grant(...);   // 不抛 403
 }
 ```
 - [ ] **步骤 2：运行确认失败**
-- [ ] **步骤 3：实现**（LeaveService 两方法 + 端点 + ADMIN 校验复用 T2 的私有 helper `requireAdmin()`）
+- [ ] **步骤 3：实现**（LeaveService 两方法 + 端点 + 复用 T2 的 `requireLeaveManage()` 权限码校验）
 - [ ] **步骤 4：`mvn test -Dtest=LeaveAdminGrantTests` 通过**
 - [ ] **步骤 5：Commit** `git commit -m "feat(leave): 管理员授予/调整余额（额度设定/剩余修正+日志留痕+ADMIN）"`
 
@@ -359,25 +371,28 @@ GET /api/leave/admin/balances/{userId}
 GET /api/leave/admin/logs?userId=&typeCode=&page=0&size=50
   → {items:[{id, typeCode, typeName, unit, delta, txnType, typeLabel,   // typeLabel 中文：授予/调整/额度设定/请假扣减/冲销/冻结/释放
              operatorId, operatorName, acceptName, reason, remark,
-             refInstanceNo, refInstanceId, createdAt}], total}
-  // refInstanceId：按 refInstanceNo 反查 process_instance.id（实例不存在则 null）
+             refInstanceNo, instanceId, createdAt}], total}
+  // instanceId 直存（裁决 3；审批联动流水写入实例 id，管理操作 null）
 
 GET /api/leave/admin/export?orgId=&typeCode=&keyword=
   → CSV 文本（复用 csv 组装：员工/部门/假期类型/额度/已用/冻结/剩余/单位），Content-Disposition 下载
 ```
-- [ ] **步骤 1：写失败测试** `LeaveManageTests`：
+- [ ] **步骤 1：写失败测试** `LeaveManageTests`（部门人数按裁决 4：4 演示用户全在 TECH，新 4 部门 0 人）：
 ```java
 @Test void departments_with_member_counts() {
     var depts = leaveService.adminDepartments();
-    assertThat(depts).extracting("orgCode").contains("TECH","HR");
+    assertThat(depts).extracting("orgCode").contains("TECH","MARKET","OPERATIONS","ADMIN_DEPT","HR");
+    var tech = depts.stream().filter(d -> "TECH".equals(d.get("orgCode"))).findFirst().orElseThrow();
+    assertThat((Number) tech.get("memberCount")).isEqualTo(4);      // 4 演示用户未移动
     var hr = depts.stream().filter(d -> "HR".equals(d.get("orgCode"))).findFirst().orElseThrow();
-    assertThat((Number) hr.get("memberCount")).isGreaterThan(0);   // admin/finance 已归 HR
+    assertThat((Number) hr.get("memberCount")).isEqualTo(0);        // 新部门空
 }
 @Test void employees_filter_by_org_and_type() {
-    var list = leaveService.adminEmployees(hrId(), "ANNUAL", null);
-    assertThat(list).allMatch(e -> hrId().equals(e.get("orgId")));
+    var techId = leaveService.adminDepartments().stream().filter(d -> "TECH".equals(d.get("orgCode"))).findFirst().orElseThrow().get("id");
+    var list = leaveService.adminEmployees(techId, "ANNUAL", null);
+    assertThat(list).hasSize(4).allMatch(e -> techId.equals(e.get("orgId")));
     assertThat(list.get(0).get("balances")).hasSize(1);             // 只含 ANNUAL
-    var all = leaveService.adminEmployees(null, null, "经");
+    var all = leaveService.adminEmployees(null, null, "张");        // 命中某个种子 realName
     assertThat(all).isNotEmpty();
 }
 @Test void balances_row_shape_and_unlimited_null() {
@@ -393,12 +408,12 @@ GET /api/leave/admin/export?orgId=&typeCode=&keyword=
     assertThat(logs.items().get(0)).satisfies(it -> {
         assertThat(it.get("typeLabel")).isIn("请假扣减","冻结","释放","冲销","授予","调整","额度设定");
         assertThat(it.get("operatorName")).isNotBlank();
-        assertThat(it.get("refInstanceId")).isNotNull();
+        assertThat(it.get("instanceId")).isNotNull();
     });
 }
 ```
 - [ ] **步骤 2：运行确认失败**
-- [ ] **步骤 3：实现**（LeaveService：`adminDepartments/adminEmployees/adminBalances/adminLogs/adminExport`；`refInstanceId` 用 `processInstanceRepository.findByInstanceNo`（已有则复用））
+- [ ] **步骤 3：实现**（LeaveService：`adminDepartments/adminEmployees/adminBalances/adminLogs/adminExport`；`instanceId` 直取流水列，`typeLabel`/`operatorName` 组装复用 T1 的 `toTxnMap`）
 - [ ] **步骤 4：`mvn test -Dtest=LeaveManageTests` 通过；全量 `mvn test` 全绿**
 - [ ] **步骤 5：Commit** `git commit -m "feat(leave): 假期管理查询/余额日志/CSV导出（部门树+筛选+ADMIN）"`
 
@@ -434,44 +449,47 @@ GET /api/leave/admin/export?orgId=&typeCode=&keyword=
 
 ---
 
-### 任务 6：前端「我的假期」页单位感知
+### 任务 6：五 Tab 导航框架 + 我的假期（MyLeave）单位感知 + 全部考勤
 
 **文件：**
-- 修改：`api/leave.ts`（LeaveType +`unit: 'day'|'hour'|'half_day'`/`limited: boolean`/`weight: number`；LeaveTransaction +`txnType`/`operatorName`/`acceptName`/`unit`/`refInstanceId`/`typeLabel`；LeaveBalance 数值 `number` 不变（JSON 小数）+`unit`/`limited`）
-- 修改：`pages/Leave.tsx`
+- 创建：`pages/MyLeave.tsx`（现 Leave.tsx 内容搬入 + 单位感知改造）
+- 创建：`pages/AllAttendance.tsx`（简化只读版）、`components/AttendanceTabs.tsx`（五 Tab 栏，NavLink）
+- 重写：`pages/Leave.tsx`（权限切换包装；**T6 阶段先恒渲染 MyLeave**，T7 加 canManage 分支）
+- 修改：`pages/Attendance.tsx`（顶部包 AttendanceTabs）、`components/AppShell.tsx`（导航两项 → 一个「考勤&假期」`/attendance` + 面包屑）、`pages/App.tsx`（路由 ×4）
+- 修改：`api/leave.ts`（LeaveType +`unit/limited/weight`；LeaveTransaction +`txnType/typeLabel/operatorName/acceptName/unit/instanceId`；LeaveBalance +`unit/limited`）、`api/check.ts`（+`listAll`）、`types/index.ts`
+- 后端小改：`CheckService.listAll(month, userId?)`（join 用户姓名，按 user+月份查）+ `CheckController` `GET /api/check/all?month=&userId=`；测试 `AttendanceTests` +1 例（month 过滤 + 含 userName，RED→GREEN）
 
-- [ ] **步骤 1：改 `api/leave.ts` 类型定义**（后端 T1/T4 的 map 键名逐字对齐：`unit/limited/weight/txnType/typeLabel/operatorName/acceptName/refInstanceId`）
-- [ ] **步骤 2：改 `Leave.tsx`**：
-  - 单位标签 `const UNIT_LABEL = { day: '天', hour: '小时', half_day: '半天' }`；卡片可用值后跟单位（`{available} {UNIT_LABEL[t.unit]}`）；进度条百分比 `used/quota` 对 unlimited 保持 0。
-  - 流水行：类型标签（typeLabel 或 delta 符号着色）+ 单位 + 操作人（operatorName）+ 关联单号 → `<a onClick={navigate('/tracking/' + refInstanceId)}>`（refInstanceId 为 null 时纯文本）。
-  - 导出 CSV 列：`['假期类型','单位','变动','类型','操作人','原因','备注','关联单号','时间']`。
-  - 现有「不限额度」展示逻辑保留（`limited === false`）。
-- [ ] **步骤 3：`npx tsc --noEmit` 通过**
-- [ ] **步骤 4：Commit** `git commit -m "feat(leave-ui): 我的假期页单位感知+流水五要素+关联流程跳转"`
+**路由与 Tab 结构（裁决 1）：**
+- `/attendance` → 我的考勤（Attendance 内容不变，加 Tab 栏；NavLink `end` 精确匹配）
+- `/attendance/all` → 全部考勤：月份选择 + 人员下拉（userApi.list）+ 表（姓名/打卡时间/类型 in-out 文案/日期）+ 说明条「状态与 IP 统计将在考勤模块增强中提供」
+- `/attendance/settings` → 占位 EmptyState「考勤设置规划中」
+- `/leave` → `canManage = hasPerm('leave:manage')` → LeaveManagement（T7）/ MyLeave；Tab「假期管理」恒显示
+- `/leave/types` → LeaveTypes（T8）；Tab「假期类型」仅 canManage；「全部考勤/考勤设置」所有登录用户可见
+
+**MyLeave 单位感知：** `UNIT_LABEL = { day:'天', hour:'小时', half_day:'半天' }`；卡片可用值带单位；进度条 used/quota（unlimited=0）；流水行 typeLabel（delta 符号着色）+ 操作人 + 单位，`instanceId` 非 null → 链接 `/tracking/{instanceId}`；导出 CSV 列 = 假期类型/单位/变动/类型/操作人/原因/备注/关联单号/时间；unlimited 展示保留。
+
+- [ ] **步骤 1：后端 `CheckService.listAll` RED→GREEN**（AttendanceTests 先加失败例再实现）
+- [ ] **步骤 2：前端 api 类型 + 五 Tab 框架 + 三考勤路由**
+- [ ] **步骤 3：MyLeave 单位感知 + AllAttendance + 占位页 + Leave.tsx 包装（恒 MyLeave）**
+- [ ] **步骤 4：`npx tsc --noEmit` 通过 + 后端 full green**
+- [ ] **步骤 5：Commit** `git commit -m "feat(attendance-leave): 考勤&假期五Tab导航框架+我的假期单位感知+全部考勤简化版"`
 
 ---
 
-### 任务 7：前端「假期管理」页（HD-01/02/07/08）
+### 任务 7：前端「假期管理」+「余额详情」页（HD-01/02/07/08）
 
 **文件：**
-- 创建：`pages/LeaveManage.tsx`
-- 修改：`api/leave.ts`（admin api 组：`departments/employees/balances/logs/grant/export`）
-- 修改：`pages/App.tsx`、`components/AppShell.tsx`（路由 `/leave/manage` + 导航「假期管理」`perm:'leave:manage'` + 面包屑）
+- 创建：`pages/LeaveManagement.tsx`（HD-01）、`pages/LeaveBalanceDetail.tsx`（HD-02/03/07，路由 `/leave/balance/:userId`，`ProtectedRoute perm="leave:manage"`）
+- 修改：`pages/Leave.tsx`（canManage 分支渲染 LeaveManagement）、`api/leave.ts`（admin 组：`departments/employees/balances/transactions/grant/export`，对齐 T4）、`components/AppShell.tsx`（面包屑）
 
-**页面结构（需求 5.3.1/5.3.2/5.3.3/5.4.1）：**
-- 筛选区：假期类型下拉（`leaveApi.types()`）+ 姓名搜索 + `导出` 按钮（`adminExport` 触发 CSV 下载，复用 `utils/csv`）。
-- 左侧：部门树（`adminDepartments()`，显示 `orgName(memberCount)`，顶部「全部」节点）。
-- 右侧：员工表（姓名/部门/职位 + 选中类型或全部类型的余额列）；行尾 `查看` → 展开/跳转余额详情区。
-- 余额详情（HD-02，点击员工后右侧表格）：列 = 名称/假期时长(quota)/已用/剩余/时长单位/操作；不限额行显示 `不限额`；操作三按钮：
-  - `编辑剩余时长`（blue，unlimited 禁用 + title 提示）/ `假期时长`（red）→ 弹窗输入数值（step 按单位：day/half_day=1，hour=0.5）+ 备注 → `adminGrant({action:'SET_REMAINING'|'SET_QUOTA'})` → 刷新；
-  - `日志`（red）→ 弹窗表格（需求 5.3.3 列：名称/操作人/接受人/类型/说明/备注），说明含 refInstanceNo 时带「查看关联流程」链接。
-- 全页仅 ADMIN 可见（路由 `ProtectedRoute perm="leave:manage"`）。
+**LeaveManagement：** 筛选区（类型下拉+姓名搜索+`导出`→CSV，不限额行写「不限额」，文件名含日期）；左部门树（`adminDepartments()`，`orgName(memberCount)`，顶部「全部」，点击过滤）；右员工表（姓名/部门/职位+余额列）行尾 `查看` → `navigate('/leave/balance/'+id)`。
 
-- [ ] **步骤 1：`api/leave.ts` 补 admin 组（类型对齐 T4 响应）**
-- [ ] **步骤 2：实现 `LeaveManage.tsx`**（复用项目卡片/表格类名风格：`rounded-2xl border ... dark:` 双主题）
-- [ ] **步骤 3：路由 + 导航 + 面包屑**（AppShell NAV_ITEMS +`{to:'/leave/manage', label:'假期管理', perm:'leave:manage'}`；`/leave` 导航 label 保持「我的假期」）
-- [ ] **步骤 4：`npx tsc --noEmit` 通过**
-- [ ] **步骤 5：Commit** `git commit -m "feat(leave-ui): 假期管理页（部门树+余额+授予/调整+日志+导出）"`
+**LeaveBalanceDetail：** 标题 `假期余额 - {realName} {orgName}`；表列 名称/假期时长/已用/剩余/时长单位/操作（unlimited 行三列「不限额」）；三按钮 `编辑剩余时长`（blue，unlimited 禁用+title）/`假期时长`（red）→ 弹窗数值（step：day/half_day=1，hour=0.5）+备注 → `adminGrant`；`日志`（red）→ 弹窗表（名称/操作人/接受人/类型/说明/备注），`instanceId` 非 null 附「查看关联流程」→ `/tracking/{instanceId}`。
+
+- [ ] **步骤 1：`api/leave.ts` 补 admin 组**
+- [ ] **步骤 2：实现两页面 + Leave.tsx 权限分支 + 面包屑**
+- [ ] **步骤 3：`npx tsc --noEmit` 通过**
+- [ ] **步骤 4：Commit** `git commit -m "feat(leave-ui): 假期管理页+余额详情页（三按钮/日志/导出/权限切换）"`
 
 ---
 
@@ -479,16 +497,14 @@ GET /api/leave/admin/export?orgId=&typeCode=&keyword=
 
 **文件：**
 - 创建：`pages/LeaveTypes.tsx`
-- 修改：`pages/App.tsx`、`components/AppShell.tsx`（路由 `/leave/types` + 导航「假期类型」`perm:'leave:manage'`）
-- 修改：`api/leave.ts`（`createType/updateType/deleteType`）
+- 修改：`pages/App.tsx`（路由 `/leave/types`，`ProtectedRoute perm="leave:manage"`）、`components/AppShell.tsx`（面包屑）、`api/leave.ts`（`createType/updateType/deleteType`）
 
-**页面（需求 5.3.4/5.3.5）：** 右上 `+ 创建新类型`（red）；表格列 = 名称/限额(是|否)/时长单位/权重/操作(编辑|删除)；弹窗表单四必填：名称、限额(单选 否/是)、时长单位(单选 天/小时/半天)、权重(数字默认 0)；删除：有数据时后端 400 → toast 展示后端 message。
+**页面（需求 5.3.4/5.3.5）：** 右上 `+ 创建新类型`（red）；表格列 = 名称/限额(是|否)/时长单位/权重/操作(编辑/删除)；弹窗表单四必填：名称、限额(单选 否/是)、时长单位(单选 天/小时/半天)、权重(数字默认 0)；删除：有数据时后端 400 → toast 展示后端 message。
 
 - [ ] **步骤 1：`api/leave.ts` 补类型 CRUD 调用**
-- [ ] **步骤 2：实现 `LeaveTypes.tsx`**
-- [ ] **步骤 3：路由 + 导航**
-- [ ] **步骤 4：`npx tsc --noEmit` 通过**
-- [ ] **步骤 5：Commit** `git commit -m "feat(leave-ui): 假期类型管理页（CRUD+四必填+单位/权重）"`
+- [ ] **步骤 2：实现 `LeaveTypes.tsx` + 路由**
+- [ ] **步骤 3：`npx tsc --noEmit` 通过**
+- [ ] **步骤 4：Commit** `git commit -m "feat(leave-ui): 假期类型管理页（CRUD+四必填+单位/权重）"`
 
 ---
 
@@ -499,11 +515,11 @@ GET /api/leave/admin/export?orgId=&typeCode=&keyword=
 - [ ] **步骤 3：部署** `./build.sh all`（Synology 目录禁 `up --build`）
 - [ ] **步骤 4：E2E 脚本**（`/tmp/oa-leave-e2e.sh`，admin/manager 登录，断言）：
   1. `GET /api/leave/types` → 9+1 类，单位/权重/限额与需求表一致（年假 是/99/天，事假 否/98/小时，病假 否/97/半天…）
-  2. `GET /api/leave/admin/departments` → 含 HR(2)/TECH(1)/MARKET(1)
+  2. `GET /api/leave/admin/departments` → 5 部门：TECH(4)，MARKET/OPERATIONS/ADMIN_DEPT/HR 各 0（演示用户未移动）
   3. 员工余额：`GET /api/leave/admin/balances/{employeeId}` → 年假有数值、病假显示 null（不限额）
   4. 授予：`POST /api/leave/admin/grant`（employee ANNUAL SET_QUOTA 20）→ 余额更新 + 日志 1 条 typeLabel=额度设定
-  5. 审批联动：employee 发起 leave（`{"leaveType":"年假","days":"1.5"}`）→ manager 通过 → ANNUAL 余额 −1.5，日志含 refInstanceId
-  6. 非 ADMIN：employee 调 `POST /api/leave/admin/grant` → 403
+  5. 审批联动：employee 发起 leave（`{"leaveType":"年假","days":"1.5"}`）→ manager 通过 → ANNUAL 余额 −1.5，日志含 instanceId
+  6. 无权限：employee（无 `leave:manage`）调 `POST /api/leave/admin/grant` → 403
   7. 导出：`GET /api/leave/admin/export` → CSV 含 BOM 与表头
   8. 类型 CRUD：创建「测试假」→ 编辑 → 删除（空数据成功；对年假删除 → 400）
 - [ ] **步骤 5：README** 假期模块章节（导航/权限/三账本/单位语义/9 类型/授予操作）
@@ -513,6 +529,6 @@ GET /api/leave/admin/export?orgId=&typeCode=&keyword=
 
 ## 执行顺序与依赖
 
-T1（数据层，其余全依赖）→ T2 ∥ T3（同改 LeaveController，T3 依赖 T1 的 grant 签名）→ T4（依赖 T1/T3 的日志字段）→ T5（依赖 T1）→ T6 ∥ T7 ∥ T8（前端，依赖 T1/T4 响应形状）→ T9。
+T1（数据层，其余全依赖）→ T2 ∥ T3（同改 LeaveController；T3 依赖 T1 grant 签名 + T2 的 requireLeaveManage）→ T4（依赖 T1/T3 日志字段）→ T5（依赖 T1）→ T6（导航框架，独立）→ T7（依赖 T6 的 Leave.tsx 包装 + T4 响应）→ T8（依赖 T6 的 Tab）→ T9。
 
-**预计测试增量**：约 +14 例（LeaveTests +2、Crud +4、Grant +5、Manage +4、Process +3，去重后按实际）；全量 75 → 约 89。
+**预计测试增量**：约 +15 例（LeaveTests +2、Crud +5、Grant +6、Manage +4、Process +3、Attendance +1，按实际）；全量 75 → 约 90。
