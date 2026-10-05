@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   leaveApi,
-  type AdminDepartment,
   type AdminEmployee,
   type LeaveBalance,
   type LeaveUnit,
   type LeaveType,
 } from '../api/leave'
+import { orgApi, type OrgNode } from '../api/org'
 import { useToast } from '../components/Toast'
 import EmptyState, { ErrorState, LoadingState } from '../components/EmptyState'
 
@@ -27,7 +27,7 @@ export default function LeaveManagement() {
   const navigate = useNavigate()
   const { showToast } = useToast()
   const [types, setTypes] = useState<LeaveType[]>([])
-  const [departments, setDepartments] = useState<AdminDepartment[]>([])
+  const [departments, setDepartments] = useState<OrgNode[]>([])
   const [orgId, setOrgId] = useState<number | null>(null)
   const [typeCode, setTypeCode] = useState('')
   const [keyword, setKeyword] = useState('')
@@ -41,9 +41,10 @@ export default function LeaveManagement() {
       .listAllTypes()
       .then((ts) => setTypes(ts.filter((t) => t.enabled)))
       .catch(() => setTypes([]))
-    leaveApi
-      .adminDepartments()
-      .then(setDepartments)
+    // 6.4.3：部门树统一走 /organizations/tree（memberCount 实时派生）
+    orgApi
+      .tree()
+      .then((t) => setDepartments(t.flatMap((n) => [n, ...n.children])))
       .catch(() => setDepartments([]))
   }, [])
 
