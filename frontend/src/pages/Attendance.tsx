@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { checkApi, type CheckMonthDay, type CheckToday } from '../api/check'
+import AttendanceTabs from '../components/AttendanceTabs'
 import EmptyState, { ErrorState, LoadingState } from '../components/EmptyState'
 import { useToast } from '../components/Toast'
 import { formatDateTime } from '../utils/format'
@@ -82,6 +83,7 @@ export default function Attendance() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
+      <AttendanceTabs />
       {/* 今日打卡 */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-700 dark:bg-slate-800">
         <div className="flex flex-wrap items-center justify-between gap-4">

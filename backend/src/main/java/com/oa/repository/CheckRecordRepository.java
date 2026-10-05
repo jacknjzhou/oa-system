@@ -11,4 +11,6 @@ public interface CheckRecordRepository extends JpaRepository<CheckRecord, Long> 
     List<CheckRecord> findByUserIdAndCheckTimeBetweenOrderByCheckTimeAsc(Long userId,
                                                                          LocalDateTime start,
                                                                          LocalDateTime end);
+
+    List<CheckRecord> findByCheckTimeBetweenOrderByCheckTimeAsc(LocalDateTime start, LocalDateTime end);
 }

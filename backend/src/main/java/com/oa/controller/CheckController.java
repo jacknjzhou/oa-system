@@ -55,4 +55,15 @@ public class CheckController {
         LocalDate d = date == null ? LocalDate.now() : date;
         return ApiResponse.success(checkService.month(current.getId(), d.getYear(), d.getMonthValue()));
     }
+
+    /** 全部考勤（只读）：?date=2026-10&userId= 均可选。 */
+    @GetMapping("/all")
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public ApiResponse<List<Map<String, Object>>> all(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) Long userId) {
+        authService.getCurrentUser();
+        LocalDate d = date == null ? LocalDate.now() : date;
+        return ApiResponse.success(checkService.listAll(d.getYear(), d.getMonthValue(), userId));
+    }
 }

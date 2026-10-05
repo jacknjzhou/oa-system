@@ -24,6 +24,17 @@ export interface CheckMonthDay {
   count: number
 }
 
+export interface CheckAllRow {
+  id: number
+  userId: number
+  userName: string | null
+  username: string | null
+  checkTime: string
+  type: 'in' | 'out'
+  source: string
+  note: string | null
+}
+
 /** 打卡（AT-01） */
 export const checkApi = {
   clock: (type: 'in' | 'out', source: 'manual' | 'scan' = 'manual', note?: string) =>
@@ -31,4 +42,11 @@ export const checkApi = {
   today: () => apiClient.get<CheckToday>('/check/today').then((r) => r.data),
   month: (date?: string) =>
     apiClient.get<CheckMonthDay[]>('/check/month', { params: date ? { date } : {} }).then((r) => r.data),
+  /** 全部考勤（只读）：date=当月任意一天（ISO）；userId 可选 */
+  listAll: (date?: string, userId?: number | null) =>
+    apiClient
+      .get<CheckAllRow[]>('/check/all', {
+        params: { ...(date ? { date } : {}), ...(userId ? { userId } : {}) },
+      })
+      .then((r) => r.data),
 }

@@ -44,12 +44,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     to: '/attendance',
-    label: '考勤打卡',
-    icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
-  },
-  {
-    to: '/leave',
-    label: '我的假期',
+    label: '考勤&假期',
     icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
   },
   {
@@ -98,8 +93,12 @@ function pageTitle(pathname: string): string {
   if (pathname.startsWith('/my-instances')) return '我的申请'
   if (pathname.startsWith('/approval-types')) return '审批类型'
   if (pathname.startsWith('/cc')) return '抄送给我'
-  if (pathname.startsWith('/attendance')) return '考勤打卡'
-  if (pathname.startsWith('/leave')) return '我的假期'
+  if (pathname.startsWith('/attendance/all')) return '全部考勤'
+  if (pathname.startsWith('/attendance/settings')) return '考勤设置'
+  if (pathname.startsWith('/attendance')) return '我的考勤'
+  if (pathname.startsWith('/leave/types')) return '假期类型'
+  if (pathname.startsWith('/leave/balance/')) return '假期余额'
+  if (pathname.startsWith('/leave')) return '假期管理'
   if (pathname.startsWith('/users')) return '员工管理'
   if (pathname.startsWith('/permission-groups')) return '权组与权限'
   if (pathname.startsWith('/settings')) return '系统设置'

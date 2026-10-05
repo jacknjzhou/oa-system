@@ -2,7 +2,9 @@ package com.oa.service;
 
 import com.oa.dto.CheckRecordDTO;
 import com.oa.entity.CheckRecord;
+import com.oa.entity.User;
 import com.oa.repository.CheckRecordRepository;
+import com.oa.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,7 @@ import java.util.Map;
 public class CheckService {
 
     private final CheckRecordRepository checkRecordRepository;
+    private final UserRepository userRepository;
 
     @Transactional
     public CheckRecordDTO clock(Long userId, String type, String source, String note) {
@@ -95,5 +98,36 @@ public class CheckService {
             days.add(row);
         });
         return days;
+    }
+
+    /** 全部考勤（只读，任意登录用户可见）：月度窗口 + 可选人员过滤，行带用户姓名。 */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> listAll(int year, int month, Long userId) {
+        LocalDateTime start = LocalDate.of(year, month, 1).atStartOfDay();
+        LocalDateTime end = start.plusMonths(1);
+        List<CheckRecord> records = checkRecordRepository
+                .findByCheckTimeBetweenOrderByCheckTimeAsc(start, end)
+                .stream()
+                .filter(r -> userId == null || userId.equals(r.getUserId()))
+                .toList();
+        if (records.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, User> userById = userRepository.findAllById(
+                        records.stream().map(CheckRecord::getUserId).distinct().toList())
+                .stream().collect(java.util.stream.Collectors.toMap(User::getId, u -> u));
+        return records.stream().map(r -> {
+            User u = userById.get(r.getUserId());
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", r.getId());
+            row.put("userId", r.getUserId());
+            row.put("userName", u == null ? null : u.getRealName());
+            row.put("username", u == null ? null : u.getUsername());
+            row.put("checkTime", r.getCheckTime());
+            row.put("type", r.getType());
+            row.put("source", r.getSource());
+            row.put("note", r.getNote());
+            return row;
+        }).toList();
     }
 }

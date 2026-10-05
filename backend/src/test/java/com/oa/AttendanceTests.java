@@ -9,6 +9,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -43,5 +44,22 @@ class AttendanceTests {
         assertEquals(1, monthDays.size(), "当月应只有 1 天记录");
         long cnt = ((Number) monthDays.get(0).get("count")).longValue();
         assertEquals(2, cnt, "当天 2 张卡");
+    }
+
+    /** 全部考勤（HD 简化版）：月度窗口 + 可选人员过滤，行带用户姓名。 */
+    @Test
+    @Order(2)
+    void list_all_attendance_with_month_filter() {
+        int year = LocalDate.now().getYear();
+        int month = LocalDate.now().getMonthValue();
+
+        List<Map<String, Object>> rows = checkService.listAll(year, month, null);
+        assertFalse(rows.isEmpty(), "本月已有打卡记录");
+        assertTrue(rows.stream().anyMatch(r -> "普通员工".equals(r.get("userName")) && java.util.Objects.equals(3L, r.get("userId"))));
+        assertTrue(rows.stream().allMatch(r -> r.get("checkTime") != null && r.get("type") != null));
+
+        List<Map<String, Object>> onlyEmp = checkService.listAll(year, month, 3L);
+        assertEquals(rows.size(), onlyEmp.size());
+        assertTrue(onlyEmp.stream().allMatch(r -> java.util.Objects.equals(3L, r.get("userId"))));
     }
 }

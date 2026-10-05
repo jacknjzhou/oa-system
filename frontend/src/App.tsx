@@ -10,8 +10,11 @@ import ProcessTracking from './pages/ProcessTracking'
 import MyInstances from './pages/MyInstances'
 import CcList from './pages/CcList'
 import Attendance from './pages/Attendance'
+import AllAttendance from './pages/AllAttendance'
+import AttendanceSettings from './pages/AttendanceSettings'
 import PrintAttendance from './pages/PrintAttendance'
 import Leave from './pages/Leave'
+import LeaveTypes from './pages/LeaveTypes'
 import Users from './pages/Users'
 import PermissionGroups from './pages/PermissionGroups'
 import Settings from './pages/Settings'
@@ -42,8 +45,18 @@ export default function App() {
         <Route path="/my-instances" element={<MyInstances />} />
         <Route path="/cc" element={<CcList />} />
         <Route path="/attendance" element={<Attendance />} />
+        <Route path="/attendance/all" element={<AllAttendance />} />
+        <Route path="/attendance/settings" element={<AttendanceSettings />} />
         <Route path="/print" element={<PrintAttendance />} />
         <Route path="/leave" element={<Leave />} />
+        <Route
+          path="/leave/types"
+          element={
+            <ProtectedRoute perm="leave:manage">
+              <LeaveTypes />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/users" element={<ProtectedRoute perm="hr:user"><Users /></ProtectedRoute>} />
         <Route path="/permission-groups" element={<ProtectedRoute perm="system:permission"><PermissionGroups /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute perm={['system:settings', 'system:log', 'system:company']}><Settings /></ProtectedRoute>} />
