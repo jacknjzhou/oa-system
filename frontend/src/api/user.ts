@@ -117,4 +117,6 @@ export const userApi = {
   createJobTitle: (body: DictCreateBody) => apiClient.post<DictRow>('/job-titles', body).then((r) => r.data),
   updateJobTitle: (id: number, body: Partial<DictCreateBody>) =>
     apiClient.put<DictRow>(`/job-titles/${id}`, body).then((r) => r.data),
+  deleteJobLevel: (id: number) => apiClient.delete(`/job-levels/${id}`).then((r) => r.data),
+  deleteJobTitle: (id: number) => apiClient.delete(`/job-titles/${id}`).then((r) => r.data),
 }

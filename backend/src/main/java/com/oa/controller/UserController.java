@@ -282,17 +282,35 @@ public class UserController {
         return ApiResponse.success(jobLevelView(jobLevelRepository.save(l)));
     }
 
-    /** 职级屏蔽/启用。body: {enabled} */
+    /** 职级改名/启停（SY-03）：code 不可变（引用保护）；名称空 400。 */
     @PutMapping("/job-levels/{id}")
     @Transactional
     public ApiResponse<Map<String, Object>> updateJobLevel(@PathVariable Long id,
                                                            @RequestBody JobLevelRequest req) {
         JobLevel l = jobLevelRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "职级不存在"));
+        if (req.getName() == null || req.getName().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "名称必填");
+        }
+        l.setName(req.getName().trim());
         if (req.getEnabled() != null) {
             l.setEnabled(req.getEnabled());
         }
         return ApiResponse.success(jobLevelView(jobLevelRepository.save(l)));
+    }
+
+    /** 删除职级（SY-03）：被未删除员工引用时 400（软数据，改绑优先）。 */
+    @DeleteMapping("/job-levels/{id}")
+    @Transactional
+    public ApiResponse<Boolean> deleteJobLevel(@PathVariable Long id) {
+        JobLevel l = jobLevelRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "职级不存在"));
+        long refs = userRepository.countByJobLevelIdAndStatusNot(l.getId(), UserStatus.DELETED);
+        if (refs > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "该职级下有 " + refs + " 名员工（未删除），不可删除");
+        }
+        jobLevelRepository.delete(l);
+        return ApiResponse.success(true);
     }
 
     /** 创建职称（SY-04）：code 缺省=名称。 */
@@ -314,17 +332,35 @@ public class UserController {
         return ApiResponse.success(jobTitleView(jobTitleRepository.save(t)));
     }
 
-    /** 职称屏蔽/启用。body: {enabled} */
+    /** 职称改名/启停（SY-04）：code 不可变；名称空 400。 */
     @PutMapping("/job-titles/{id}")
     @Transactional
     public ApiResponse<Map<String, Object>> updateJobTitle(@PathVariable Long id,
                                                            @RequestBody JobLevelRequest req) {
         JobTitle t = jobTitleRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "职称不存在"));
+        if (req.getName() == null || req.getName().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "名称必填");
+        }
+        t.setName(req.getName().trim());
         if (req.getEnabled() != null) {
             t.setEnabled(req.getEnabled());
         }
         return ApiResponse.success(jobTitleView(jobTitleRepository.save(t)));
+    }
+
+    /** 删除职称（SY-04）：被未删除员工引用时 400。 */
+    @DeleteMapping("/job-titles/{id}")
+    @Transactional
+    public ApiResponse<Boolean> deleteJobTitle(@PathVariable Long id) {
+        JobTitle t = jobTitleRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "职称不存在"));
+        long refs = userRepository.countByJobTitleIdAndStatusNot(t.getId(), UserStatus.DELETED);
+        if (refs > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "该职称下有 " + refs + " 名员工（未删除），不可删除");
+        }
+        jobTitleRepository.delete(t);
+        return ApiResponse.success(true);
     }
 
     private Map<String, Object> jobLevelView(JobLevel l) {

@@ -11,6 +11,8 @@ export default function JobLevels() {
   const [error, setError] = useState('')
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editName, setEditName] = useState('')
 
   const refresh = useCallback(async () => {
     try {
@@ -40,6 +42,32 @@ export default function JobLevels() {
       await refresh()
     } catch (e) {
       showToast(e instanceof Error ? e.message : '创建失败', 'error')
+    }
+  }
+
+  const saveRename = async (r: JobLevelRow) => {
+    if (!editName.trim()) {
+      showToast('名称必填', 'error')
+      return
+    }
+    try {
+      await userApi.updateJobLevel(r.id, { name: editName.trim(), enabled: r.enabled })
+      setEditingId(null)
+      setEditName('')
+      await refresh()
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '保存失败', 'error')
+    }
+  }
+
+  const removeRow = async (r: JobLevelRow) => {
+    if (!window.confirm(`确定删除「${r.name}」？（被员工引用时将被拒绝，建议先改绑）`)) return
+    try {
+      await userApi.deleteJobLevel(r.id)
+      showToast('已删除')
+      await refresh()
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '删除失败', 'error')
     }
   }
 
@@ -110,12 +138,49 @@ export default function JobLevels() {
                     </span>
                   </td>
                   <td className="px-5 py-3 text-right">
-                    <button
-                      onClick={() => void toggle(r)}
-                      className="text-xs text-primary-600 hover:underline"
-                    >
-                      {r.enabled ? '屏蔽' : '启用'}
-                    </button>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => void toggle(r)}
+                        className="text-xs text-slate-500 hover:underline"
+                      >
+                        {r.enabled ? '屏蔽' : '启用'}
+                      </button>
+                      {editingId === r.id ? (
+                        <span className="flex items-center gap-1">
+                          <input
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            className="w-24 rounded border border-slate-300 px-1 py-0.5 text-xs dark:border-slate-600 dark:bg-slate-700"
+                            autoFocus
+                          />
+                          <button onClick={() => void saveRename(r)} className="text-xs text-emerald-600 hover:underline">
+                            存
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingId(null)
+                              setEditName('')
+                            }}
+                            className="text-xs text-slate-400 hover:underline"
+                          >
+                            取消
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setEditingId(r.id)
+                            setEditName(r.name)
+                          }}
+                          className="text-xs text-primary-600 hover:underline"
+                        >
+                          改名
+                        </button>
+                      )}
+                      <button onClick={() => void removeRow(r)} className="text-xs text-red-500 hover:underline">
+                        删除
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

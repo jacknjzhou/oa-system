@@ -13,6 +13,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -117,17 +118,22 @@ class LeaveTests {
         long orgCount = organizationRepository.count();
         assertTrue(orgCount >= 5, "应有 技术部 + 4 新增部门: " + orgCount);
 
-        // 四裁决④：演示用户不移动部门（全在技术部），新部门为空
-        List<User> users = userRepository.findAll();
-        var techMembers = users.stream()
+        // 四裁决④：演示用户不移动部门（全在技术部）。
+        // 只查 4 个种子演示用户——其它测试类（如 UserCreateTests）创建的临时用户可被调岗/停用，不受此约束。
+        List<User> demoUsers = List.of("admin", "manager", "employee", "finance").stream()
+                .map(userRepository::findByUsername)
+                .flatMap(Optional::stream)
+                .toList();
+        assertEquals(4, demoUsers.size(), "演示用户应存在");
+        long techMembers = demoUsers.stream()
                 .filter(u -> u.getOrg() != null && "TECH".equals(u.getOrg().getOrgCode()))
                 .count();
-        assertEquals(users.size(), techMembers, "演示用户应全部留在技术部");
+        assertEquals(4, techMembers, "演示用户应全部留在技术部");
 
-        var marketMembers = users.stream()
+        long marketMembers = demoUsers.stream()
                 .filter(u -> u.getOrg() != null && "MARKET".equals(u.getOrg().getOrgCode()))
                 .count();
-        assertEquals(0, marketMembers, "市场部应无成员（不移动演示用户）");
+        assertEquals(0, marketMembers, "演示用户不应被移入市场部");
     }
 
     private static Map<String, Object> byCode(List<Map<String, Object>> types, String code) {

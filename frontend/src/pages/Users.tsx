@@ -1,9 +1,21 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { userApi, type JobLevelRow, type UserRow } from '../api/user'
+import { orgApi, type OrgNode } from '../api/org'
 import EmptyState, { ErrorState, LoadingState } from '../components/EmptyState'
 import { useToast } from '../components/Toast'
 import { getStoredUser } from '../api/auth'
 import { formatDateTime } from '../utils/format'
+import EmployeeFormModal from '../components/EmployeeFormModal'
+
+type SubTab = 'active' | 'disabled' | 'deleted' | 'all'
+
+const SUB_TABS: { key: SubTab; label: string }[] = [
+  { key: 'active', label: '在职' },
+  { key: 'disabled', label: '已禁用' },
+  { key: 'deleted', label: '回收站' },
+  { key: 'all', label: '全部' },
+]
 
 const STATUS_META: Record<UserRow['status'], { label: string; cls: string }> = {
   ACTIVE: { label: '正常', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' },
@@ -12,194 +24,295 @@ const STATUS_META: Record<UserRow['status'], { label: string; cls: string }> = {
   DELETED: { label: '已删除', cls: 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400' },
 }
 
-/** 员工管理（SY-01）：正常/回收站 + 禁用、删除、恢复。 */
+function flatten(list: OrgNode[]): OrgNode[] {
+  const out: OrgNode[] = []
+  const walk = (n: OrgNode) => {
+    out.push(n)
+    n.children.forEach(walk)
+  }
+  list.forEach(walk)
+  return out
+}
+
+/**
+ * 员工管理（SY-01 / 6.3.1 / 6.3.2）：
+ * 子 Tab（在职/已禁用/回收站/全部，6.4.5-7 停用与已删除互斥归类）+ 部门/关键字筛选（6.3.2）
+ * + 九列表格（性别/部门/职称/职级/主管/最近登录）+ 创建/编辑弹窗 + 禁用/恢复/删除。
+ * 停用/删除自守卫（6.4.5-6）；已删除进回收站可恢复。
+ */
 export default function Users() {
   const { showToast } = useToast()
   const me = getStoredUser()
-  const [tab, setTab] = useState<'active' | 'recycle'>('active')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const canManage =
+    (me?.roles ?? []).includes('ADMIN') || (me?.permissions ?? []).includes('hr:user')
+
+  const [tab, setTab] = useState<SubTab>('active')
+  const [keyword, setKeyword] = useState('')
+  const [orgId, setOrgId] = useState<number | ''>('')
+  const [orgs, setOrgs] = useState<OrgNode[]>([])
   const [rows, setRows] = useState<UserRow[]>([])
   const [levels, setLevels] = useState<JobLevelRow[]>([])
+  const [supervisors, setSupervisors] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(0)
+  const [modal, setModal] = useState<{ mode: 'create' | 'edit'; row?: UserRow } | null>(null)
+  const [pendingCreateOrg, setPendingCreateOrg] = useState<number | null | undefined>(undefined)
+
+  // ?create=1&org=123（部门页入口，验收 3）
+  useEffect(() => {
+    if (searchParams.get('create') === '1') {
+      const org = searchParams.get('org')
+      setModal({ mode: 'create' })
+      setPendingCreateOrg(org ? Number(org) : null)
+      searchParams.delete('create')
+      searchParams.delete('org')
+      setSearchParams(searchParams, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
+
+  useEffect(() => {
+    orgApi
+      .tree()
+      .then((t) => setOrgs(flatten(t)))
+      .catch(() => setOrgs([]))
+    userApi.jobLevels(true).then(setLevels).catch(() => setLevels([]))
+    userApi
+      .list({ status: 'active' })
+      .then(setSupervisors)
+      .catch(() => setSupervisors([]))
+  }, [])
 
   const load = useCallback(() => {
     setLoading(true)
     setError('')
-    Promise.all([userApi.list(tab === 'recycle'), userApi.jobLevels(true).catch(() => [] as JobLevelRow[])])
-      .then(([u, lv]) => {
-        setRows(u)
-        setLevels(lv)
-      })
+    userApi
+      .list({ status: tab, orgId: orgId === '' ? null : orgId, keyword: keyword.trim() || null })
+      .then(setRows)
       .catch((err) => setError(err instanceof Error ? err.message : '加载失败'))
       .finally(() => setLoading(false))
-  }, [tab])
+  }, [tab, keyword, orgId])
 
   useEffect(() => {
-    load()
+    void load()
   }, [load])
 
-  const changeLevel = async (u: UserRow, levelId: number | null) => {
-    setBusy(u.id)
+  const levelName = (id?: number | null) =>
+    id == null ? '—' : levels.find((l) => l.id === id)?.name ?? `#${id}`
+
+  const supervisorName = (id?: number | null) => {
+    if (id == null) return '—'
+    const s = supervisors.find((x) => x.id === id)
+    return s ? (s.realName ?? s.username) : `#${id}`
+  }
+
+  const disable = async (r: UserRow) => {
+    if (me && Number(me.id) === r.id) {
+      showToast('不能禁用当前登录用户', 'error')
+      return
+    }
+    if (!window.confirm(`确定禁用「${r.realName ?? r.username}」？（其部门人数与候选人将同步减少）`)) return
+    setBusy(1)
     try {
-      await userApi.update(u.id, {
-        jobLevelId: levelId,
-        clearJobLevel: levelId == null,
-        supervisorId: u.supervisorId ?? null,
-      } as Parameters<typeof userApi.update>[1])
-      showToast('已更新职级', 'success')
-      load()
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : '操作失败', 'error')
-    } finally {
+      await userApi.disable(r.id)
+      showToast('已禁用')
+      setBusy(0)
+      void load()
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '操作失败', 'error')
       setBusy(0)
     }
   }
 
-  const act = async (id: number, fn: () => Promise<unknown>, msg: string) => {
-    if (busy) return
-    setBusy(id)
+  const remove = async (r: UserRow) => {
+    if (me && Number(me.id) === r.id) {
+      showToast('不能删除当前登录用户（请使用禁用）', 'error')
+      return
+    }
+    if (!window.confirm(`确定删除「${r.realName ?? r.username}」？（进入回收站，可恢复）`)) return
+    setBusy(1)
     try {
-      await fn()
-      showToast(msg, 'success')
-      load()
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : '操作失败', 'error')
-    } finally {
+      await userApi.remove(r.id)
+      showToast('已删除（回收站）')
+      setBusy(0)
+      void load()
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '操作失败', 'error')
       setBusy(0)
     }
   }
 
-  const deletedCount = useMemo(() => rows.filter((r) => r.status === 'DELETED').length, [rows])
-
-  if (loading && rows.length === 0) return <LoadingState />
-  if (error && rows.length === 0) return <ErrorState message={error} onRetry={load} />
+  const restore = async (r: UserRow) => {
+    setBusy(1)
+    try {
+      if (r.status === 'DELETED') await userApi.restore(r.id)
+      else await userApi.enable(r.id)
+      showToast('已恢复')
+      setBusy(0)
+      void load()
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '操作失败', 'error')
+      setBusy(0)
+    }
+  }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
-      <div className="flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800 w-fit">
-        {(['active', 'recycle'] as const).map((t) => (
+    <div>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="mr-auto flex rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800">
+          {SUB_TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`rounded-md px-3 py-1.5 text-sm ${
+                tab === t.key
+                  ? 'bg-primary-600 text-white'
+                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <select
+          value={orgId}
+          onChange={(e) => setOrgId(e.target.value ? Number(e.target.value) : '')}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800"
+        >
+          <option value="">全部部门</option>
+          {orgs.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.orgName}
+            </option>
+          ))}
+        </select>
+        <input
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          placeholder="搜索姓名/账号/手机/工号"
+          className="w-52 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800"
+        />
+        {canManage && tab !== 'deleted' && (
           <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`rounded-lg px-4 py-1.5 text-sm transition ${
-              tab === t
-                ? 'bg-white font-medium shadow-sm dark:bg-slate-700'
-                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-            }`}
+            onClick={() => setModal({ mode: 'create' })}
+            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
           >
-            {t === 'active' ? `成员` : `回收站 (${deletedCount})`}
+            创建新员工
           </button>
-        ))}
+        )}
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
-        {rows.length === 0 ? (
-          <div className="p-8">
-            <EmptyState
-              title={tab === 'active' ? '暂无成员' : '回收站为空'}
-              description={tab === 'active' ? '系统用户将显示在这里' : '删除的用户会进入回收站，可恢复'}
-            />
-          </div>
+      <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+        {loading ? (
+          <LoadingState />
+        ) : error ? (
+          <ErrorState onRetry={load} message={error} />
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-left text-xs text-slate-400 dark:border-slate-700">
-                <th className="px-4 py-3 font-medium">账号</th>
-                <th className="px-4 py-3 font-medium">姓名</th>
-                <th className="px-4 py-3 font-medium">角色</th>
-                <th className="px-4 py-3 font-medium">职级</th>
-                <th className="px-4 py-3 font-medium">状态</th>
-                <th className="px-4 py-3 font-medium">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const meta = STATUS_META[r.status] || STATUS_META.INACTIVE
-                const isSelf = me?.username === r.username
-                return (
-                  <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-700/50">
-                    <td className="px-4 py-3 font-mono text-xs">{r.username}</td>
-                    <td className="px-4 py-3">
-                      {r.realName || '—'}
-                      {r.position ? <span className="ml-2 text-xs text-slate-400">{r.position}</span> : null}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 text-left text-xs text-slate-400 dark:border-slate-700">
+                  <th className="px-5 py-3">姓名</th>
+                  <th className="px-3 py-3">账号</th>
+                  <th className="px-3 py-3">部门</th>
+                  <th className="px-3 py-3">职称</th>
+                  <th className="px-3 py-3">职级</th>
+                  <th className="px-3 py-3">主管</th>
+                  <th className="px-3 py-3">状态</th>
+                  <th className="px-3 py-3">最近登录</th>
+                  <th className="px-5 py-3 text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50/50 dark:border-slate-700/50">
+                    <td className="px-5 py-3 font-medium text-slate-700 dark:text-slate-200">
+                      {r.realName ?? r.username}
+                      {r.gender === 'male' && <span className="ml-1 text-xs text-slate-400">男</span>}
+                      {r.gender === 'female' && <span className="ml-1 text-xs text-slate-400">女</span>}
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
-                      {(r.roles || []).join(' / ') || '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <select
-                        disabled={busy !== 0 || r.status === 'DELETED'}
-                        value={r.jobLevelId ?? ''}
-                        onChange={(e) => changeLevel(r, e.target.value ? Number(e.target.value) : null)}
-                        className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs disabled:opacity-50 dark:border-slate-600 dark:bg-slate-700"
+                    <td className="px-3 py-3 text-slate-500">{r.username}</td>
+                    <td className="px-3 py-3 text-slate-500">{r.orgName ?? '—'}</td>
+                    <td className="px-3 py-3 text-slate-500">{r.jobTitleName ?? '—'}</td>
+                    <td className="px-3 py-3 text-slate-500">{levelName(r.jobLevelId)}</td>
+                    <td className="px-3 py-3 text-slate-500">{supervisorName(r.supervisorId)}</td>
+                    <td className="px-3 py-3">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs ${STATUS_META[r.status].cls}`}
+                        title={r.status === 'DELETED' && r.deletedAt ? formatDateTime(r.deletedAt) : undefined}
                       >
-                        <option value="">—</option>
-                        {levels.map((lv) => (
-                          <option key={lv.id} value={lv.id}>
-                            {lv.name}
-                            {lv.enabled ? '' : '（已屏蔽）'}
-                          </option>
-                        ))}
-                      </select>
+                        {STATUS_META[r.status].label}
+                      </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded-full px-2 py-0.5 text-xs ${meta.cls}`}>{meta.label}</span>
-                      {r.status === 'DELETED' && r.deletedAt && (
-                        <span className="ml-2 text-xs text-slate-400">{formatDateTime(r.deletedAt)}</span>
-                      )}
+                    <td className="px-3 py-3 text-xs text-slate-400">
+                      {r.lastLoginAt ? formatDateTime(r.lastLoginAt) : '—'}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2 text-xs">
-                        {r.status === 'ACTIVE' && (
-                          <>
-                            <button
-                              disabled={busy !== 0 || isSelf}
-                              onClick={() => act(r.id, () => userApi.disable(r.id), '已禁用')}
-                              className="text-amber-600 hover:underline disabled:opacity-40 dark:text-amber-400"
-                            >
-                              禁用
-                            </button>
-                            <button
-                              disabled={busy !== 0 || isSelf}
-                              onClick={() =>
-                                window.confirm(`确定将 ${r.username} 移入回收站？`) &&
-                                act(r.id, () => userApi.remove(r.id), '已删除')
-                              }
-                              className="text-rose-600 hover:underline disabled:opacity-40 dark:text-rose-400"
-                            >
-                              删除
-                            </button>
-                          </>
-                        )}
-                        {r.status === 'INACTIVE' && (
+                    <td className="px-5 py-3 text-right">
+                      <div className="flex justify-end gap-2 text-xs">
+                        {canManage && tab !== 'deleted' && (
                           <button
-                            disabled={busy !== 0}
-                            onClick={() => act(r.id, () => userApi.enable(r.id), '已启用')}
-                            className="text-emerald-600 hover:underline disabled:opacity-40 dark:text-emerald-400"
+                            onClick={() => setModal({ mode: 'edit', row: r })}
+                            className="text-primary-600 hover:underline"
                           >
-                            启用
+                            编辑
                           </button>
                         )}
-                        {r.status === 'DELETED' && (
+                        {r.status === 'ACTIVE' && canManage && (
                           <button
-                            disabled={busy !== 0}
-                            onClick={() => act(r.id, () => userApi.restore(r.id), '已恢复')}
-                            className="text-emerald-600 hover:underline disabled:opacity-40 dark:text-emerald-400"
+                            disabled={busy === r.id}
+                            onClick={() => void disable(r)}
+                            className="text-amber-600 hover:underline disabled:opacity-50"
                           >
-                            恢复
+                            禁用
                           </button>
                         )}
-                        {isSelf && <span className="text-slate-400">（当前账号）</span>}
+                        {r.status !== 'ACTIVE' && canManage && (
+                          <button
+                            disabled={busy === r.id}
+                            onClick={() => void restore(r)}
+                            className="text-emerald-600 hover:underline disabled:opacity-50"
+                          >
+                            {r.status === 'DELETED' ? '恢复' : '启用'}
+                          </button>
+                        )}
+                        {tab !== 'deleted' && canManage && (
+                          <button
+                            disabled={busy === r.id}
+                            onClick={() => void remove(r)}
+                            className="text-red-500 hover:underline disabled:opacity-50"
+                          >
+                            删除
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+            {rows.length === 0 && <EmptyState title="无匹配员工" />}
+          </div>
         )}
       </div>
+
+      {modal && (
+        <EmployeeFormModal
+          mode={modal.mode}
+          initial={modal.row}
+          defaultOrgId={modal.mode === 'create' ? (pendingCreateOrg ?? null) : null}
+          canManage={canManage}
+          onClose={() => {
+            setModal(null)
+            setPendingCreateOrg(undefined)
+          }}
+          onSaved={() => {
+            setModal(null)
+            setPendingCreateOrg(undefined)
+            void load()
+          }}
+        />
+      )}
     </div>
   )
 }

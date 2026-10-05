@@ -3,6 +3,7 @@ package com.oa;
 import com.oa.controller.UserController;
 import com.oa.dto.ApiResponse;
 import com.oa.dto.JobLevelRequest;
+import com.oa.dto.JobTitleRequest;
 import com.oa.entity.User;
 import com.oa.repository.JobLevelRepository;
 import com.oa.repository.JobTitleRepository;
@@ -57,6 +58,7 @@ class JobMasterDataTests {
                 .findFirst().orElseThrow()
                 .get("id") instanceof Number n ? n.longValue() : null;
         JobLevelRequest req = new JobLevelRequest();
+        req.setName("L4级"); // 启停请求携带当前名称（改名语义：name 必填）
         req.setEnabled(false);
         userController.updateJobLevel(l4, req);
         assertEquals(false, userController.listJobLevels(false).getData().stream()
@@ -93,5 +95,80 @@ class JobMasterDataTests {
         User saved = userRepository.save(finance);
         assertEquals(((Number) l2.get("id")).longValue(), saved.getJobLevelId());
         assertTrue(saved.getJobLevelId() != null);
+    }
+
+    @Test
+    void rename_level() {
+        JobLevelRequest req = new JobLevelRequest();
+        req.setCode("l6-test2");
+        req.setName("改名前");
+        Map<String, Object> created = userController.createJobLevel(req).getData();
+        Long id = ((Number) created.get("id")).longValue();
+        try {
+            JobLevelRequest rename = new JobLevelRequest();
+            rename.setName("改名后");
+            assertEquals("改名后", userController.updateJobLevel(id, rename).getData().get("name"));
+
+            JobLevelRequest blank = new JobLevelRequest();
+            blank.setName("  ");
+            ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                    () -> userController.updateJobLevel(id, blank));
+            assertEquals(org.springframework.http.HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        } finally {
+            userController.deleteJobLevel(id); // 无引用可删
+        }
+    }
+
+    @Test
+    void delete_level_protected_by_users() {
+        JobLevelRequest req = new JobLevelRequest();
+        req.setCode("l7-test2");
+        req.setName("受保护职级");
+        Long id = ((Number) userController.createJobLevel(req).getData().get("id")).longValue();
+
+        // 临时在职员工绑定（仓库直建，避免创建端点校验）
+        User u = new User();
+        u.setUsername("t5_protected_" + System.nanoTime());
+        u.setPasswordHash("disabled-test");
+        u.setRealName("保护测试");
+        u.setStatus(com.oa.enums.UserStatus.ACTIVE);
+        u.setJobLevelId(id);
+        u = userRepository.save(u);
+        try {
+            ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                    () -> userController.deleteJobLevel(id));
+            assertEquals(org.springframework.http.HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        } finally {
+            u.setJobLevelId(null);
+            u.setStatus(com.oa.enums.UserStatus.DELETED);
+            userRepository.save(u);
+            userController.deleteJobLevel(id); // 解绑后可删
+        }
+    }
+
+    @Test
+    void delete_title_protected_by_users() {
+        JobTitleRequest req = new JobTitleRequest();
+        req.setCode("t5p-test");
+        req.setName("受保护职称");
+        Long id = ((Number) userController.createJobTitle(req).getData().get("id")).longValue();
+
+        User u = new User();
+        u.setUsername("t5_title_" + System.nanoTime());
+        u.setPasswordHash("disabled-test");
+        u.setRealName("职称保护");
+        u.setStatus(com.oa.enums.UserStatus.ACTIVE);
+        u.setJobTitleId(id);
+        u = userRepository.save(u);
+        try {
+            ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                    () -> userController.deleteJobTitle(id));
+            assertEquals(org.springframework.http.HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        } finally {
+            u.setJobTitleId(null);
+            u.setStatus(com.oa.enums.UserStatus.DELETED);
+            userRepository.save(u);
+            userController.deleteJobTitle(id);
+        }
     }
 }

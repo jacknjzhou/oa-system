@@ -18,4 +18,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     long countByOrgIdAndStatus(Long orgId, UserStatus status);
 
     List<User> findByStatus(UserStatus status);
+
+    long countByJobLevelIdAndStatusNot(Long jobLevelId, UserStatus status);
+
+    long countByJobTitleIdAndStatusNot(Long jobTitleId, UserStatus status);
 }
