@@ -14,6 +14,7 @@ import AllAttendance from './pages/AllAttendance'
 import AttendanceSettings from './pages/AttendanceSettings'
 import PrintAttendance from './pages/PrintAttendance'
 import Leave from './pages/Leave'
+import LeaveBalanceDetail from './pages/LeaveBalanceDetail'
 import LeaveTypes from './pages/LeaveTypes'
 import Users from './pages/Users'
 import PermissionGroups from './pages/PermissionGroups'
@@ -49,6 +50,14 @@ export default function App() {
         <Route path="/attendance/settings" element={<AttendanceSettings />} />
         <Route path="/print" element={<PrintAttendance />} />
         <Route path="/leave" element={<Leave />} />
+        <Route
+          path="/leave/balance/:userId"
+          element={
+            <ProtectedRoute perm="leave:manage">
+              <LeaveBalanceDetail />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/leave/types"
           element={

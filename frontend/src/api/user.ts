@@ -21,6 +21,8 @@ export interface UserRow {
   position?: string | null
   email?: string | null
   supervisorId?: number | null
+  orgId?: number | null
+  orgName?: string | null
   roles?: string[]
   jobLevelId?: number | null
   status: 'ACTIVE' | 'INACTIVE' | 'LOCKED' | 'DELETED'
