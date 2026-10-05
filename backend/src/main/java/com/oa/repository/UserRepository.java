@@ -1,6 +1,7 @@
 package com.oa.repository;
 
 import com.oa.entity.User;
+import com.oa.enums.UserStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -13,4 +14,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findByOrgId(Long orgId);
 
     List<User> findByRolesRoleCode(String roleCode);
+
+    long countByOrgIdAndStatus(Long orgId, UserStatus status);
+
+    List<User> findByStatus(UserStatus status);
 }

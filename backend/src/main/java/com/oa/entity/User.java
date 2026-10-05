@@ -36,6 +36,14 @@ public class User extends BaseEntity {
     @JoinColumn(name = "org_id")
     private Organization org;
 
+    /** 性别（男/女，可空） */
+    @Column(name = "gender", length = 8)
+    private String gender;
+
+    /** 职称（job_title.id，可空） */
+    @Column(name = "job_title_id")
+    private Long jobTitleId;
+
     @Column(name = "username", nullable = false, unique = true, length = 64)
     private String username;
 

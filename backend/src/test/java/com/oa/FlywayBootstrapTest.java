@@ -29,8 +29,8 @@ class FlywayBootstrapTest {
 
     @Test
     void contextBootsAndMigrationsApplied() {
-        // 当前迁移版本：V22 假期单位/日志/部门 + V23(h2) 账本 decimal 化
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("23");
+        // 当前迁移版本：V23(h2) 账本 decimal 化 + V24 员工性别/职称
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("24");
     }
 
     @Test
