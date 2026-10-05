@@ -184,4 +184,28 @@ class FlowDesignerTests {
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("尚未设计流程");
     }
+
+    @Test
+    void update_rejectsDefKeyChange_allowsMissingKey() {
+        loginAs("admin");
+        ProcessDefinitionRequest create = new ProcessDefinitionRequest();
+        create.setDefKey("upd_key_test");
+        create.setName("key 修改测试");
+        DefinitionDTO created = processService.createDefinition(create);
+
+        // key 不可修改：更新时携带不同 key 必须拒绝
+        ProcessDefinitionRequest change = new ProcessDefinitionRequest();
+        change.setDefKey("other_key");
+        change.setName("改名");
+        assertThatThrownBy(() -> processService.updateDefinition(created.getId(), change))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("不可修改");
+
+        // 前端更新不带 key（历史行为）：保持原 key，更新成功
+        ProcessDefinitionRequest noKey = new ProcessDefinitionRequest();
+        noKey.setName("仅改名");
+        DefinitionDTO updated = processService.updateDefinition(created.getId(), noKey);
+        assertThat(updated.getDefKey()).isEqualTo("upd_key_test");
+        assertThat(updated.getName()).isEqualTo("仅改名");
+    }
 }

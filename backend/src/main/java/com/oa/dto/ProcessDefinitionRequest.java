@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ProcessDefinitionRequest {
 
-    @NotBlank(message = "流程定义key不能为空")
+    /** 创建时必填；更新时可省略（保持原 key），携带不同 key 会被拒绝 */
     private String defKey;
 
     @NotBlank(message = "流程名称不能为空")

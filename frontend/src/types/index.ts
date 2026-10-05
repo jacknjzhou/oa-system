@@ -77,6 +77,8 @@ export interface TemplateCreatePayload {
 }
 
 export interface TemplateUpdatePayload {
+  /** 不可修改，编辑时回传原值（兼容后端校验） */
+  defKey?: string
   name: string
   category: string
   formConfig: string

@@ -296,6 +296,7 @@ export default function TemplateEditor({ mode }: TemplateEditorProps) {
         showToast(publish ? '模板已创建并发布' : '模板创建成功', 'success')
       } else if (template) {
         await updateTemplate(template.id, {
+          defKey: defKey.trim(),
           name: name.trim(),
           category: category.trim(),
           formConfig: formConfigJson,
