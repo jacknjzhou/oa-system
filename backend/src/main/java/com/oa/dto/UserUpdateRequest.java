@@ -23,4 +23,15 @@ public class UserUpdateRequest {
     /** 职级 id；未传 = 不动，clearJobLevel=true = 清除 */
     private Long jobLevelId;
     private Boolean clearJobLevel;
+
+    /** 部门 id（调岗）；未传 = 不动，clearOrg=true = 清除归属 */
+    private Long orgId;
+    private Boolean clearOrg;
+
+    /** 性别（男/女）；未传 = 不动 */
+    private String gender;
+
+    /** 职称 id；未传 = 不动，clearJobTitle=true = 清除 */
+    private Long jobTitleId;
+    private Boolean clearJobTitle;
 }

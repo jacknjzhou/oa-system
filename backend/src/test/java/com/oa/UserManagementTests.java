@@ -73,7 +73,7 @@ class UserManagementTests {
 
         // 常规列表不可见
         loginAs("admin");
-        ApiResponse<List<Map<String, Object>>> list = userController.listUsers(false);
+        ApiResponse<List<Map<String, Object>>> list = userController.listUsers("active", null, null);
         assertTrue(list.getData().stream().noneMatch(m -> "finance".equals(m.get("username"))));
     }
 
@@ -88,9 +88,9 @@ class UserManagementTests {
         assertTrue(deleted.getDeletedAt() != null);
 
         // 常规列表不可见，回收站列表可见
-        ApiResponse<List<Map<String, Object>>> normal = userController.listUsers(false);
+        ApiResponse<List<Map<String, Object>>> normal = userController.listUsers("active", null, null);
         assertTrue(normal.getData().stream().noneMatch(m -> "finance".equals(m.get("username"))));
-        ApiResponse<List<Map<String, Object>>> recycle = userController.listUsers(true);
+        ApiResponse<List<Map<String, Object>>> recycle = userController.listUsers("deleted", null, null);
         assertTrue(recycle.getData().stream().anyMatch(m -> "finance".equals(m.get("username"))
                 && "DELETED".equals(m.get("status"))));
 

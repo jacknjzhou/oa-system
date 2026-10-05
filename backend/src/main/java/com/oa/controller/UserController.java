@@ -1,13 +1,18 @@
 package com.oa.controller;
 
 import com.oa.dto.ApiResponse;
+import jakarta.validation.Valid;
 import com.oa.dto.JobLevelRequest;
+import com.oa.dto.JobTitleRequest;
+import com.oa.dto.UserCreateRequest;
 import com.oa.dto.UserUpdateRequest;
 import com.oa.entity.JobLevel;
 import com.oa.entity.JobTitle;
 import com.oa.entity.Role;
+import com.oa.entity.Organization;
 import com.oa.entity.User;
 import com.oa.repository.JobLevelRepository;
+import com.oa.repository.OrganizationRepository;
 import com.oa.repository.JobTitleRepository;
 import com.oa.enums.EnableStatus;
 import com.oa.enums.UserStatus;
@@ -17,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
 import com.oa.service.AuthService;
+import com.oa.service.PermissionService;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,6 +32,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.LinkedHashMap;
@@ -46,35 +53,110 @@ public class UserController {
     private final RoleRepository roleRepository;
     private final AuthService authService;
     private final JobLevelRepository jobLevelRepository;
+    private final OrganizationRepository organizationRepository;
     private final JobTitleRepository jobTitleRepository;
+    private final PermissionService permissionService;
 
     @GetMapping("/users")
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public ApiResponse<List<Map<String, Object>>> listUsers(
-            @RequestParam(defaultValue = "false") boolean includeDeleted) {
+            @RequestParam(defaultValue = "active") String status,
+            @RequestParam(required = false) Long orgId,
+            @RequestParam(required = false) String keyword) {
+        String st = status == null ? "active" : status.trim().toLowerCase();
         List<User> users = userRepository.findAll().stream()
-                .filter(u -> u.getStatus() == UserStatus.DELETED ? includeDeleted
-                        : u.getStatus() == UserStatus.ACTIVE)
+                .filter(u -> switch (st) {
+                    case "all" -> true;
+                    case "disabled" -> u.getStatus() == UserStatus.INACTIVE
+                            || u.getStatus() == UserStatus.LOCKED;
+                    case "deleted" -> u.getStatus() == UserStatus.DELETED;
+                    default -> u.getStatus() == UserStatus.ACTIVE;
+                })
+                .filter(u -> orgId == null || (u.getOrg() != null && orgId.equals(u.getOrg().getId())))
+                .filter(u -> keyword == null || keyword.isBlank()
+                        ? true
+                        : matches(u, keyword.trim()))
                 .toList();
-        return ApiResponse.success(users.stream().map(u -> {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("id", u.getId());
-            m.put("username", u.getUsername());
-            m.put("realName", u.getRealName());
-            m.put("position", u.getPosition());
-            m.put("email", u.getEmail());
-            m.put("orgId", u.getOrg() == null ? null : u.getOrg().getId());
-            m.put("orgName", u.getOrg() == null ? null : u.getOrg().getOrgName());
-            m.put("supervisorId", u.getSupervisorId());
-            m.put("roles", u.getRoleCodes());
-            m.put("jobLevelId", u.getJobLevelId());
-            m.put("status", u.getStatus() != null ? u.getStatus().name() : null);
-            m.put("deletedAt", u.getDeletedAt());
-            return m;
-        }).toList());
+        return ApiResponse.success(users.stream().map(this::userView).toList());
+    }
+
+    /** 创建员工（6.4.4）：需 hr:user；字典字段（部门/主管/职级/职称）均校验存在性与在职状态。 */
+    @PostMapping("/users")
+    @Transactional
+    public ApiResponse<Map<String, Object>> createUser(@Valid @RequestBody UserCreateRequest req) {
+        requireUserManage();
+        if (req.getUsername() == null || !req.getUsername().matches("[a-z0-9_.-]{2,32}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "用户名格式: 2-32 位小写字母/数字/_ . -");
+        }
+        if (userRepository.findByUsername(req.getUsername()).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "用户名已存在: " + req.getUsername());
+        }
+        if (req.getPassword() == null || req.getPassword().length() < 8) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "初始密码至少 8 位");
+        }
+        User u = new User();
+        u.setUsername(req.getUsername());
+        u.setPasswordHash(passwordEncoder().encode(req.getPassword()));
+        u.setRealName(req.getRealName());
+        u.setGender(req.getGender());
+        u.setPosition(req.getPosition());
+        u.setPhone(req.getPhone());
+        u.setEmail(req.getEmail());
+        u.setStatus(UserStatus.ACTIVE);
+        if (req.getOrgId() != null) {
+            var org = organizationRepository.findById(req.getOrgId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "部门不存在"));
+            u.setOrg(org);
+        }
+        if (req.getSupervisorId() != null) {
+            u.setSupervisorId(requireActiveUser(req.getSupervisorId()).getId());
+        }
+        if (req.getJobLevelId() != null) {
+            if (jobLevelRepository.findById(req.getJobLevelId()).isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "职级不存在");
+            }
+            u.setJobLevelId(req.getJobLevelId());
+        }
+        if (req.getJobTitleId() != null) {
+            if (jobTitleRepository.findById(req.getJobTitleId()).isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "职称不存在");
+            }
+            u.setJobTitleId(req.getJobTitleId());
+        }
+        if (req.getRoleCodes() != null) {
+            u.setRoles(req.getRoleCodes().stream()
+                    .map(code -> roleRepository.findByRoleCode(code)
+                            .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "角色不存在: " + code)))
+                    .collect(Collectors.toSet()));
+        }
+        return ApiResponse.success(userView(userRepository.save(u)));
+    }
+
+    /** 权限校验：ADMIN 或 hr:user（员工创建；HTTP 边界层强制）。 */
+    private void requireUserManage() {
+        User current = authService.getCurrentUser();
+        if (current == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "未登录");
+        }
+        boolean admin = current.getRoleCodes().stream().anyMatch("ADMIN"::equals);
+        boolean hasPerm = permissionService.permissionCodes(current.getId()).contains("hr:user");
+        if (!admin && !hasPerm) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "无员工管理权限（hr:user）");
+        }
+    }
+
+    /** 主管/引用必须为在职员工（6.4.5-4）。 */
+    private User requireActiveUser(Long id) {
+        User u = userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "主管不存在"));
+        if (u.getStatus() != UserStatus.ACTIVE) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "主管必须为在职员工");
+        }
+        return u;
     }
 
     @GetMapping("/roles")
+
     public ApiResponse<List<Map<String, Object>>> listRoles() {
         List<Role> roles = roleRepository.findAll().stream()
                 .filter(r -> r.getStatus() == EnableStatus.ENABLED)
@@ -101,8 +183,33 @@ public class UserController {
         if (req.getPosition() != null) user.setPosition(req.getPosition());
         if (req.getPhone() != null) user.setPhone(req.getPhone());
         if (req.getEmail() != null) user.setEmail(req.getEmail());
-        // 主管总是同步（前端设计器始终回传当前值；null = 清除）
-        user.setSupervisorId(req.getSupervisorId());
+        // 主管总是同步（前端设计器始终回传当前值；null = 清除）；非空必须为在职员工（6.4.5-4）
+        if (req.getSupervisorId() == null) {
+            user.setSupervisorId(null);
+        } else {
+            if (req.getSupervisorId().equals(user.getId())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "主管不能是自己");
+            }
+            user.setSupervisorId(requireActiveUser(req.getSupervisorId()).getId());
+        }
+        if (req.getOrgId() != null) {
+            var org = organizationRepository.findById(req.getOrgId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "部门不存在"));
+            user.setOrg(org);
+        } else if (Boolean.TRUE.equals(req.getClearOrg())) {
+            user.setOrg(null);
+        }
+        if (req.getGender() != null) {
+            user.setGender(req.getGender());
+        }
+        if (req.getJobTitleId() != null) {
+            if (jobTitleRepository.findById(req.getJobTitleId()).isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "职称不存在");
+            }
+            user.setJobTitleId(req.getJobTitleId());
+        } else if (Boolean.TRUE.equals(req.getClearJobTitle())) {
+            user.setJobTitleId(null);
+        }
         if (req.getRoleCodes() != null) {
             Set<Role> roles = req.getRoleCodes().stream()
                     .map(code -> roleRepository.findByRoleCode(code)
@@ -119,14 +226,8 @@ public class UserController {
             user.setJobLevelId(req.getJobLevelId());
         }
         User saved = userRepository.save(user);
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("id", saved.getId());
-        m.put("username", saved.getUsername());
-        m.put("realName", saved.getRealName());
-        m.put("supervisorId", saved.getSupervisorId());
-        m.put("roles", saved.getRoleCodes());
-        m.put("jobLevelId", saved.getJobLevelId());
-        return ApiResponse.success(m);
+        // 统一 userView：含 orgId/orgName/gender/jobTitleId/lastLoginAt（前端编辑弹窗回显 + 测试断言）
+        return ApiResponse.success(userView(saved));
     }
 
     /** 职级列表（?all=1 含已屏蔽）。 */
@@ -194,6 +295,25 @@ public class UserController {
         return ApiResponse.success(jobLevelView(jobLevelRepository.save(l)));
     }
 
+    /** 创建职称（SY-04）：code 缺省=名称。 */
+    @PostMapping("/job-titles")
+    @Transactional
+    public ApiResponse<Map<String, Object>> createJobTitle(@RequestBody JobTitleRequest req) {
+        if (req.getName() == null || req.getName().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "名称必填");
+        }
+        String code = req.getCode() == null || req.getCode().isBlank()
+                ? req.getName().trim() : req.getCode().trim().toUpperCase();
+        if (jobTitleRepository.findByCode(code).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "职称代码已存在: " + code);
+        }
+        JobTitle t = new JobTitle();
+        t.setCode(code);
+        t.setName(req.getName().trim());
+        t.setEnabled(req.getEnabled() == null || req.getEnabled());
+        return ApiResponse.success(jobTitleView(jobTitleRepository.save(t)));
+    }
+
     /** 职称屏蔽/启用。body: {enabled} */
     @PutMapping("/job-titles/{id}")
     @Transactional
@@ -229,6 +349,10 @@ public class UserController {
     @PostMapping("/users/{id}/disable")
     @Transactional
     public ApiResponse<Map<String, Object>> disableUser(@PathVariable Long id) {
+        User current = authService.getCurrentUser();
+        if (current != null && current.getId().equals(id)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不能禁用当前登录用户");
+        }
         User user = requireUser(id);
         user.setStatus(UserStatus.INACTIVE);
         return ApiResponse.success(userView(userRepository.save(user)));
@@ -275,6 +399,10 @@ public class UserController {
         return ApiResponse.success(userView(userRepository.save(user)));
     }
 
+    private BCryptPasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
     private User requireUser(Long id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在"));
@@ -285,8 +413,30 @@ public class UserController {
         m.put("id", u.getId());
         m.put("username", u.getUsername());
         m.put("realName", u.getRealName());
+        m.put("position", u.getPosition());
+        m.put("phone", u.getPhone());
+        m.put("email", u.getEmail());
+        m.put("gender", u.getGender());
+        m.put("orgId", u.getOrg() == null ? null : u.getOrg().getId());
+        m.put("orgName", u.getOrg() == null ? null : u.getOrg().getOrgName());
+        m.put("supervisorId", u.getSupervisorId());
+        m.put("roles", u.getRoleCodes());
+        m.put("jobLevelId", u.getJobLevelId());
+        m.put("jobTitleId", u.getJobTitleId());
+        m.put("jobTitleName", u.getJobTitleId() == null ? null
+                : jobTitleRepository.findById(u.getJobTitleId()).map(JobTitle::getName).orElse(null));
+        m.put("lastLoginAt", u.getLastLoginAt());
         m.put("status", u.getStatus() != null ? u.getStatus().name() : null);
         m.put("deletedAt", u.getDeletedAt());
         return m;
+    }
+
+    private static boolean matches(User u, String kw) {
+        return str(u.getUsername()).contains(kw) || str(u.getRealName()).contains(kw)
+                || str(u.getPhone()).contains(kw) || str(u.getEmployeeNo()).contains(kw);
+    }
+
+    private static String str(String v) {
+        return v == null ? "" : v;
     }
 }
