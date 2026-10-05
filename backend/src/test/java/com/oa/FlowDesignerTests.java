@@ -185,6 +185,38 @@ class FlowDesignerTests {
                 .hasMessageContaining("尚未设计流程");
     }
 
+    private static final String KEEP_XML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                         id="DEF_keep" targetNamespace="http://oa.local">
+              <process id="null_keep_test" isExecutable="true">
+                <startEvent id="start"/>
+                <sequenceFlow id="f1" sourceRef="start" targetRef="t1"/>
+                <userTask id="t1" name="审批"/>
+                <sequenceFlow id="f2" sourceRef="t1" targetRef="end"/>
+                <endEvent id="end"/>
+              </process>
+            </definitions>
+            """;
+
+    @Test
+    void update_nullBpmnXml_preservesExisting() {
+        loginAs("admin");
+        ProcessDefinitionRequest create = new ProcessDefinitionRequest();
+        create.setDefKey("null_keep_test");
+        create.setName("null 保留测试");
+        create.setBpmnXml(KEEP_XML);
+        DefinitionDTO created = processService.createDefinition(create);
+
+        // 客户端漏传 bpmnXml（null）不得覆盖已有流程
+        ProcessDefinitionRequest upd = new ProcessDefinitionRequest();
+        upd.setName("仅改名");
+        processService.updateDefinition(created.getId(), upd);
+        String saved = definitionRepository.findById(created.getId()).orElseThrow().getBpmnXml();
+        assertThat(saved).isNotBlank();
+        assertThat(saved).contains("null_keep_test");
+    }
+
     @Test
     void update_rejectsDefKeyChange_allowsMissingKey() {
         loginAs("admin");

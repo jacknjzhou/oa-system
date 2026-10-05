@@ -147,12 +147,15 @@ public class ProcessService {
         def.setCategory(req.getCategory());
         def.setDescription(req.getDescription());
         def.setFormConfig(req.getFormConfig());
-        boolean xmlChanged = hasText(req.getBpmnXml())
-                ? !req.getBpmnXml().equals(def.getBpmnXml())
+        // null = 未传（保留原值）；空串 = 有意清空，避免客户端漏传覆盖模板流程
+        String newXml = req.getBpmnXml() != null ? req.getBpmnXml() : def.getBpmnXml();
+        String newSpec = req.getFlowSpec() != null ? req.getFlowSpec() : def.getFlowSpec();
+        boolean xmlChanged = hasText(newXml)
+                ? !newXml.equals(def.getBpmnXml())
                 : hasText(def.getBpmnXml());
-        def.setBpmnXml(req.getBpmnXml());
-        def.setFlowSpec(req.getFlowSpec());
-        if (xmlChanged && hasText(req.getBpmnXml())) {
+        def.setBpmnXml(newXml);
+        def.setFlowSpec(newSpec);
+        if (xmlChanged && hasText(newXml)) {
             def = deployAndSyncVersion(def);
         }
         def = definitionRepository.save(def);
